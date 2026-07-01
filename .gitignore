@@ -7,4 +7,6 @@ htmlcov/
 venv/
 .env
 *.zip
+build/
+local_buckets/
 

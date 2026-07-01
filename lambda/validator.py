@@ -21,7 +21,8 @@ def validate_and_split(data: pd.DataFrame) -> tuple[pd.DataFrame, pd.DataFrame]:
 
     Duplicate customer IDs are rejected after their first occurrence.
     """
-    missing_columns = set(REQUIRED_COLUMNS) - set(data.columns)
+    # Ensure both sides are sets of plain strings to avoid typing issues
+    missing_columns = set(REQUIRED_COLUMNS) - set(map(str, data.columns))
     if missing_columns:
         names = ", ".join(sorted(missing_columns))
         raise ValueError(f"Missing required columns: {names}")

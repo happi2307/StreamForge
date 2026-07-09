@@ -2,7 +2,8 @@
 
 StreamForge is a serverless AWS data pipeline that validates customer CSV files
 uploaded to Amazon S3. Phase 1 routes S3 events through EventBridge to Lambda,
-then stores valid and rejected rows separately.
+then stores valid and rejected rows separately. Phase 2 adds AWS Glue and
+Athena so the cleaned data can be queried with SQL.
 
 ## Phase 1 architecture
 
@@ -18,6 +19,9 @@ See [the architecture document](docs/architecture.md) for more detail.
 - Amazon EventBridge
 - AWS Lambda (Python 3.12)
 - Amazon CloudWatch Logs
+- AWS Glue Data Catalog
+- AWS Glue Crawler
+- Amazon Athena
 
 ## Local setup
 
@@ -224,7 +228,80 @@ You should see `Total Records: 4 / Valid Records: 2 / Invalid Records: 2`.
 - **Cleanup** — to avoid charges, delete the function, rule, and role, then empty
   and delete the three buckets.
 
+## Deployment (AWS Phase 2)
+
+Phase 2 keeps the Phase 1 clean bucket as the source of truth and adds:
+
+- a KMS-encrypted Athena results bucket
+- a Glue database
+- a Glue crawler role and crawler
+- an Athena workgroup
+- a canonical `streamforge_clean_db.customers` table for queries
+
+### Prerequisites
+
+Phase 1 must already be deployed, and the clean bucket must contain at least one
+processed CSV file.
+
+The repository includes a PowerShell helper:
+
+```powershell
+.\scripts\deploy_phase2.ps1
+```
+
+By default it assumes:
+
+- Region: `us-east-1`
+- KMS key: `alias/streamforge-phase1`
+- Clean bucket: `streamforge-clean-<account-id>-<region>`
+- Athena results bucket: `streamforge-athena-results-<account-id>-<region>`
+- Glue database: `streamforge_clean_db`
+- Athena workgroup: `streamforge-phase2`
+
+You can override any of those values:
+
+```powershell
+.\scripts\deploy_phase2.ps1 `
+  -Region us-east-1 `
+  -KmsKeyId alias/streamforge-phase1 `
+  -GlueDatabase streamforge_clean_db `
+  -AthenaWorkgroup streamforge-phase2
+```
+
+### What the script does
+
+1. Creates and hardens the Athena results bucket with `SSE-KMS`.
+2. Creates the Glue database.
+3. Creates the Glue crawler role with read access to the clean bucket and KMS
+   decrypt access to the project key.
+4. Creates or updates the Glue crawler.
+5. Creates or updates the Athena workgroup with enforced output location and
+   `SSE-KMS` query result encryption.
+6. Runs the crawler.
+7. Creates the canonical `streamforge_clean_db.customers` table.
+8. Verifies the sample Athena queries.
+
+### Sample Athena queries
+
+See [scripts/phase2_queries.sql](scripts/phase2_queries.sql) for the DDL and
+query examples used for verification.
+
+Expected ordered query result:
+
+```text
+customer_id,name,email,sales
+101,John,john@gmail.com,500
+104,Raj,raj@gmail.com,1000
+```
+
+Expected aggregate query result:
+
+```text
+total_customers,total_sales,average_sales
+2,1500,750.0
+```
+
 ## Future enhancements
 
-Later phases may add Glue, Athena, Parquet partitioning, Terraform, Aurora,
-AWS SCT, and AWS DMS. They are intentionally outside Phase 1.
+Later phases may add Parquet partitioning, Terraform, Aurora, AWS SCT, and AWS
+DMS. They are intentionally outside Phases 1 and 2.

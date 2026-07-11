@@ -1,7 +1,7 @@
 """Unit tests for the Lambda handler using a mocked S3 client."""
 
 import importlib
-import io
+import json
 
 import pytest
 
@@ -22,13 +22,13 @@ class _FakeS3Client:
 
     def __init__(self, object_bytes: bytes) -> None:
         self._object_bytes = object_bytes
-        self.puts: dict[str, bytes] = {}
+        self.puts: dict[tuple[str, str], bytes] = {}
 
     def get_object(self, Bucket: str, Key: str) -> dict:  # noqa: N803 - boto3 kwargs
         return {"Body": _FakeBody(self._object_bytes)}
 
     def put_object(self, Bucket: str, Key: str, Body: bytes, **_: object) -> None:  # noqa: N803
-        self.puts[Bucket] = Body
+        self.puts[(Bucket, Key)] = Body
 
 
 CSV_BYTES = (
@@ -41,13 +41,22 @@ CSV_BYTES = (
 
 
 def _event(bucket: str = "dataflow-raw", key: str = "customers.csv") -> dict:
-    return {"detail": {"bucket": {"name": bucket}, "object": {"key": key}}}
+    return {
+        "time": "2026-07-11T10:15:00Z",
+        "detail": {"bucket": {"name": bucket}, "object": {"key": key}},
+    }
+
+
+class _FakeContext:
+    aws_request_id = "request-123"
 
 
 @pytest.fixture(autouse=True)
 def _buckets(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setenv("CLEAN_BUCKET", "dataflow-clean")
     monkeypatch.setenv("REJECTED_BUCKET", "dataflow-rejected")
+    monkeypatch.setenv("METADATA_BUCKET", "dataflow-metadata")
+    monkeypatch.setenv("PHASE1_PIPELINE_VERSION", "1.1.0")
 
 
 def _patch_client(monkeypatch: pytest.MonkeyPatch, client: _FakeS3Client) -> None:
@@ -58,7 +67,7 @@ def test_handler_returns_statistics(monkeypatch: pytest.MonkeyPatch) -> None:
     client = _FakeS3Client(CSV_BYTES)
     _patch_client(monkeypatch, client)
 
-    stats = handler.lambda_handler(_event(), context=None)
+    stats = handler.lambda_handler(_event(), context=_FakeContext())
 
     assert stats == {"total_records": 4, "valid_records": 2, "invalid_records": 2}
 
@@ -67,12 +76,31 @@ def test_handler_writes_clean_and_rejected(monkeypatch: pytest.MonkeyPatch) -> N
     client = _FakeS3Client(CSV_BYTES)
     _patch_client(monkeypatch, client)
 
-    handler.lambda_handler(_event(), context=None)
+    handler.lambda_handler(_event(), context=_FakeContext())
 
-    clean = client.puts["dataflow-clean"].decode("utf-8")
-    rejected = client.puts["dataflow-rejected"].decode("utf-8")
+    clean = client.puts[("dataflow-clean", "customers.csv")].decode("utf-8")
+    rejected = client.puts[("dataflow-rejected", "customers.csv")].decode("utf-8")
     assert "101,John" in clean and "104,Raj" in clean
     assert "102," in rejected and "103,Sam" in rejected
+
+
+def test_handler_writes_metadata_manifest(monkeypatch: pytest.MonkeyPatch) -> None:
+    client = _FakeS3Client(CSV_BYTES)
+    _patch_client(monkeypatch, client)
+
+    handler.lambda_handler(_event(key="incoming/customers.csv"), context=_FakeContext())
+
+    manifest_key = "metadata/incoming/customers.csv.json"
+    manifest_body = client.puts[("dataflow-metadata", manifest_key)].decode("utf-8")
+    manifest = json.loads(manifest_body)
+    assert manifest["raw_key"] == "incoming/customers.csv"
+    assert manifest["clean_key"] == "incoming/customers.csv"
+    assert manifest["event_timestamp"] == "2026-07-11T10:15:00Z"
+    assert manifest["source_filename"] == "customers.csv"
+    assert manifest["lambda_request_id"] == "request-123"
+    assert manifest["valid_records"] == 2
+    assert manifest["invalid_records"] == 2
+    assert manifest["phase1_batch_id"]
 
 
 def test_handler_rejects_empty_object(monkeypatch: pytest.MonkeyPatch) -> None:
@@ -80,7 +108,7 @@ def test_handler_rejects_empty_object(monkeypatch: pytest.MonkeyPatch) -> None:
     _patch_client(monkeypatch, client)
 
     with pytest.raises(ValueError, match="empty"):
-        handler.lambda_handler(_event(), context=None)
+        handler.lambda_handler(_event(), context=_FakeContext())
 
 
 def test_handler_rejects_malformed_event(monkeypatch: pytest.MonkeyPatch) -> None:
@@ -88,7 +116,7 @@ def test_handler_rejects_malformed_event(monkeypatch: pytest.MonkeyPatch) -> Non
     _patch_client(monkeypatch, client)
 
     with pytest.raises(ValueError, match="detail"):
-        handler.lambda_handler({}, context=None)
+        handler.lambda_handler({}, context=_FakeContext())
 
 
 def test_handler_requires_env_buckets(monkeypatch: pytest.MonkeyPatch) -> None:
@@ -97,4 +125,4 @@ def test_handler_requires_env_buckets(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.delenv("CLEAN_BUCKET", raising=False)
 
     with pytest.raises(ValueError, match="CLEAN_BUCKET"):
-        handler.lambda_handler(_event(), context=None)
+        handler.lambda_handler(_event(), context=_FakeContext())

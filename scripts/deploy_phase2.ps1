@@ -3,6 +3,7 @@ param(
     [string]$AccountId = "",
     [string]$KmsKeyId = "alias/streamforge-phase1",
     [string]$CleanBucket = "",
+    [string]$CleanDataPrefix = "",
     [string]$AthenaResultsBucket = "",
     [string]$GlueDatabase = "streamforge_clean_db",
     [string]$GlueCrawlerRole = "streamforge-glue-crawler-role",
@@ -119,6 +120,14 @@ if (-not $AthenaResultsBucket) {
     $AthenaResultsBucket = "streamforge-athena-results-$AccountId-$Region"
 }
 
+if ($CleanDataPrefix) {
+    $normalizedCleanDataPrefix = $CleanDataPrefix.Trim("/")
+    $cleanTableLocation = "s3://$CleanBucket/$normalizedCleanDataPrefix/"
+} else {
+    $normalizedCleanDataPrefix = ""
+    $cleanTableLocation = "s3://$CleanBucket/"
+}
+
 $keyArn = aws kms describe-key --region $Region --key-id $KmsKeyId --query "KeyMetadata.Arn" --output text
 if ($LASTEXITCODE -ne 0) {
     throw "Failed to resolve KMS key ARN from $KmsKeyId"
@@ -126,6 +135,7 @@ if ($LASTEXITCODE -ne 0) {
 
 Write-Host "Using account: $AccountId"
 Write-Host "Using clean bucket: $CleanBucket"
+Write-Host "Using clean table location: $cleanTableLocation"
 Write-Host "Using Athena results bucket: $AthenaResultsBucket"
 Write-Host "Using KMS key: $keyArn"
 
@@ -289,7 +299,10 @@ if (Test-AwsCall athena get-work-group --work-group $AthenaWorkgroup --region $R
 
 $crawlerTargetsFile = New-TempJsonFile @{
     S3Targets = @(
-        @{ Path = "s3://$CleanBucket/" }
+        @{
+            Path = "s3://$CleanBucket/"
+            Exclusions = @("metadata/**")
+        }
     )
 }
 
@@ -334,7 +347,7 @@ WITH SERDEPROPERTIES (
   'field.delim' = ','
 )
 STORED AS TEXTFILE
-LOCATION 's3://$CleanBucket/'
+LOCATION '$cleanTableLocation'
 TBLPROPERTIES (
   'skip.header.line.count' = '1'
 )

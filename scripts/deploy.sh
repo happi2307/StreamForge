@@ -15,6 +15,7 @@ REGION="${REGION:-us-east-1}"
 RAW="${RAW:-dataflow-raw}"
 CLEAN="${CLEAN:-dataflow-clean}"
 REJECTED="${REJECTED:-dataflow-rejected}"
+METADATA="${METADATA:-dataflow-metadata}"
 FUNC="${FUNC:-streamforge-processor}"
 ROLE="${ROLE:-streamforge-lambda-role}"
 RULE="${RULE:-streamforge-raw-uploads}"
@@ -23,7 +24,7 @@ ACCOUNT_ID="$(aws sts get-caller-identity --query Account --output text)"
 echo ">> Account $ACCOUNT_ID / region $REGION"
 
 # --- 1. Buckets -------------------------------------------------------------
-for b in "$RAW" "$CLEAN" "$REJECTED"; do
+for b in "$RAW" "$CLEAN" "$REJECTED" "$METADATA"; do
   if aws s3api head-bucket --bucket "$b" 2>/dev/null; then
     echo ">> Bucket $b already exists"
   elif [ "$REGION" = "us-east-1" ]; then
@@ -41,7 +42,7 @@ aws s3api put-bucket-notification-configuration --bucket "$RAW" \
 # --- 2. Package -------------------------------------------------------------
 rm -rf build function.zip
 pip install -r lambda/requirements.txt -t build/ >/dev/null
-cp lambda/handler.py lambda/validator.py build/
+cp lambda/handler.py lambda/validator.py lambda/metadata.py build/
 ( cd build && zip -qr ../function.zip . )
 echo ">> Built function.zip"
 
@@ -55,7 +56,7 @@ fi
 POLICY=$(cat <<JSON
 {"Version":"2012-10-17","Statement":[
   {"Effect":"Allow","Action":"s3:GetObject","Resource":"arn:aws:s3:::$RAW/*"},
-  {"Effect":"Allow","Action":"s3:PutObject","Resource":["arn:aws:s3:::$CLEAN/*","arn:aws:s3:::$REJECTED/*"]}
+  {"Effect":"Allow","Action":"s3:PutObject","Resource":["arn:aws:s3:::$CLEAN/*","arn:aws:s3:::$REJECTED/*","arn:aws:s3:::$METADATA/*"]}
 ]}
 JSON
 )
@@ -66,7 +67,7 @@ echo ">> Role $ROLE_ARN ready (waiting for propagation)"
 sleep 10
 
 # --- 4. Lambda --------------------------------------------------------------
-ENV="Variables={CLEAN_BUCKET=$CLEAN,REJECTED_BUCKET=$REJECTED}"
+ENV="Variables={CLEAN_BUCKET=$CLEAN,REJECTED_BUCKET=$REJECTED,METADATA_BUCKET=$METADATA,METADATA_PREFIX=metadata,PHASE1_PIPELINE_VERSION=1.1.0}"
 if aws lambda get-function --function-name "$FUNC" >/dev/null 2>&1; then
   aws lambda update-function-code --function-name "$FUNC" \
     --zip-file fileb://function.zip >/dev/null

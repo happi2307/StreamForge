@@ -2,8 +2,10 @@
 
 StreamForge is a serverless AWS data pipeline that validates customer CSV files
 uploaded to Amazon S3. Phase 1 routes S3 events through EventBridge to Lambda,
-then stores valid and rejected rows separately. Phase 2 adds AWS Glue and
-Athena so the cleaned data can be queried with SQL.
+then stores valid and rejected rows separately. Phase 1 now also writes a
+sidecar processing manifest for each source file so downstream phases can use
+stable lineage metadata. Phase 2 adds AWS Glue and Athena so the cleaned data
+can be queried with SQL.
 
 ## Phase 1 architecture
 
@@ -69,11 +71,21 @@ The handler returns processing statistics:
 { "total_records": 4, "valid_records": 2, "invalid_records": 2 }
 ```
 
+Phase 1 also writes a manifest JSON for each processed file. The recommended
+layout uses a separate metadata bucket so analytics jobs can enrich rows without
+changing the clean CSV schema:
+
+```text
+clean/customers.csv
+rejected/customers.csv
+metadata/customers.csv.json
+```
+
 ## Run locally (no AWS)
 
 You can exercise the full validation/cleaning flow without deploying anything.
 `scripts/run_local.py` uses local folders under `local_buckets/` in place of the
-three S3 buckets.
+raw, clean, rejected, and metadata buckets.
 
 ```powershell
 # "Upload" a CSV by dropping it into the raw folder
@@ -92,13 +104,15 @@ processing statistics are logged to the console. You can also target one file:
 
 Terraform is out of scope for Phase 1; the steps below use the AWS CLI. Pick
 **globally unique** bucket names. Commands are shown in bash — adjust variable
-syntax if you run them from PowerShell.
+syntax if you run them from PowerShell. The current implementation also uses a
+metadata bucket for Phase 1 manifests.
 
 > One-command option: steps 1–5 are bundled in `scripts/deploy.sh` (idempotent).
 > Run it, then do step 6 to test:
 >
 > ```bash
 > RAW=dataflow-raw-you CLEAN=dataflow-clean-you REJECTED=dataflow-rejected-you \
+>   METADATA=dataflow-metadata-you \
 >   REGION=us-east-1 bash scripts/deploy.sh
 > ```
 
@@ -115,6 +129,7 @@ ACCOUNT_ID=$(aws sts get-caller-identity --query Account --output text)
 RAW=dataflow-raw-you
 CLEAN=dataflow-clean-you
 REJECTED=dataflow-rejected-you
+METADATA=dataflow-metadata-you
 ```
 
 ### 1. Create the buckets
@@ -124,6 +139,7 @@ REJECTED=dataflow-rejected-you
 aws s3api create-bucket --bucket $RAW      --region $REGION
 aws s3api create-bucket --bucket $CLEAN    --region $REGION
 aws s3api create-bucket --bucket $REJECTED --region $REGION
+aws s3api create-bucket --bucket $METADATA --region $REGION
 ```
 
 Enable EventBridge notifications on the raw bucket (this is what makes uploads
@@ -141,7 +157,7 @@ pandas and boto3 exceed the inline editor limit, so ship them in the ZIP:
 ```bash
 rm -rf build function.zip
 pip install -r lambda/requirements.txt -t build/
-cp lambda/handler.py lambda/validator.py build/
+cp lambda/handler.py lambda/validator.py lambda/metadata.py build/
 cd build && zip -r ../function.zip . && cd ..
 ```
 
@@ -159,12 +175,12 @@ aws iam create-role --role-name streamforge-lambda-role \
 aws iam attach-role-policy --role-name streamforge-lambda-role \
   --policy-arn arn:aws:iam::aws:policy/service-role/AWSLambdaBasicExecutionRole
 
-# Read raw, write clean/rejected
+# Read raw, write clean/rejected/metadata
 aws iam put-role-policy --role-name streamforge-lambda-role \
   --policy-name streamforge-s3 \
   --policy-document "{\"Version\":\"2012-10-17\",\"Statement\":[
     {\"Effect\":\"Allow\",\"Action\":\"s3:GetObject\",\"Resource\":\"arn:aws:s3:::$RAW/*\"},
-    {\"Effect\":\"Allow\",\"Action\":\"s3:PutObject\",\"Resource\":[\"arn:aws:s3:::$CLEAN/*\",\"arn:aws:s3:::$REJECTED/*\"]}
+    {\"Effect\":\"Allow\",\"Action\":\"s3:PutObject\",\"Resource\":[\"arn:aws:s3:::$CLEAN/*\",\"arn:aws:s3:::$REJECTED/*\",\"arn:aws:s3:::$METADATA/*\"]}
   ]}"
 ```
 
@@ -180,10 +196,11 @@ aws lambda create-function \
   --role arn:aws:iam::$ACCOUNT_ID:role/streamforge-lambda-role \
   --zip-file fileb://function.zip \
   --timeout 60 --memory-size 256 \
-  --environment "Variables={CLEAN_BUCKET=$CLEAN,REJECTED_BUCKET=$REJECTED}"
+  --environment "Variables={CLEAN_BUCKET=$CLEAN,REJECTED_BUCKET=$REJECTED,METADATA_BUCKET=$METADATA,METADATA_PREFIX=metadata,PHASE1_PIPELINE_VERSION=1.1.0}"
 ```
 
-The two env vars tell the handler where to write. Update later deploys with
+Those environment variables tell the handler where to write and which Phase 1
+version stamp to place in the manifest. Update later deploys with
 `aws lambda update-function-code --function-name streamforge-processor
 --zip-file fileb://function.zip`.
 
@@ -210,8 +227,10 @@ aws s3 cp sample_data/customers.csv s3://$RAW/customers.csv
 # After a few seconds:
 aws s3 ls s3://$CLEAN/           # customers.csv appears
 aws s3 ls s3://$REJECTED/        # customers.csv appears
+aws s3 ls s3://$METADATA/metadata/   # customers.csv.json appears
 aws s3 cp s3://$CLEAN/customers.csv -      # rows 101, 104
 aws s3 cp s3://$REJECTED/customers.csv -   # rows 102, 103
+aws s3 cp s3://$METADATA/metadata/customers.csv.json -  # manifest metadata
 
 # Processing statistics
 aws logs tail /aws/lambda/streamforge-processor --follow
@@ -226,7 +245,7 @@ You should see `Total Records: 4 / Valid Records: 2 / Invalid Records: 2`.
   step 1 was applied to the raw bucket.
 - **`AccessDenied` writing outputs** — recheck the inline S3 policy in step 3.
 - **Cleanup** — to avoid charges, delete the function, rule, and role, then empty
-  and delete the three buckets.
+  and delete the four buckets.
 
 ## Deployment (AWS Phase 2)
 
@@ -281,7 +300,79 @@ You can override any of those values:
 7. Creates the canonical `streamforge_clean_db.customers` table.
 8. Verifies the sample Athena queries.
 
-### Sample Athena queries
+The Phase 2 crawler excludes the Phase 1 `metadata/` prefix so only clean CSV
+objects are cataloged.
+
+## Deployment (AWS Phase 3)
+
+Phase 3 turns the clean CSV layer into a curated analytics layer. It reads clean
+CSV files plus Phase 1 manifests, applies business transformations, writes
+Parquet to a curated bucket, and quarantines malformed transformed rows without
+failing the whole job unless a configured threshold is exceeded.
+
+The repository includes a PowerShell helper:
+
+```powershell
+.\scripts\deploy_phase3.ps1
+```
+
+By default it assumes:
+
+- Region: `us-east-1`
+- KMS key: `alias/streamforge-phase1`
+- Clean bucket: `streamforge-clean-<account-id>-<region>`
+- Metadata bucket: `streamforge-metadata-<account-id>-<region>`
+- Curated bucket: `streamforge-curated-<account-id>-<region>`
+- Quarantine bucket: `streamforge-quarantine-<account-id>-<region>`
+- Glue database: `streamforge_clean_db`
+- Glue job: `streamforge-transform-customers`
+- Curated table: `customers_curated`
+- Athena workgroup: `streamforge-phase3`
+
+### What the script does
+
+1. Creates and hardens the curated and quarantine buckets with `SSE-KMS`.
+2. Creates the Phase 3 Glue transform role.
+3. Uploads the Glue script and helper package to S3.
+4. Creates or updates the Phase 3 Glue job.
+5. Runs the job against the current clean data and manifests.
+6. Creates the curated Athena table.
+7. Repairs partitions and verifies the curated output with Athena.
+
+### Phase 3 outputs
+
+Curated output:
+
+```text
+s3://streamforge-curated-<account-id>-<region>/customers/year=YYYY/month=MM/day=DD/
+```
+
+Quarantine output:
+
+```text
+s3://streamforge-quarantine-<account-id>-<region>/reason=<reason>/year=YYYY/month=MM/day=DD/
+```
+
+### Business transformations
+
+Phase 3 currently implements:
+
+- whitespace trimming for string values
+- customer-name normalization
+- email lowercasing
+- sales parsing and categorical bucketing
+- lineage enrichment from the Phase 1 manifest
+- partition derivation from the manifest event timestamp
+
+If you later add a business date field to the clean schema, the Glue job can
+also standardize it by passing `-DateColumn <column-name>`.
+
+### Phase 3 sample Athena queries
+
+See [scripts/phase3_queries.sql](scripts/phase3_queries.sql) for example queries
+over `streamforge_clean_db.customers_curated`.
+
+### Phase 2 sample Athena queries
 
 See [scripts/phase2_queries.sql](scripts/phase2_queries.sql) for the DDL and
 query examples used for verification.
@@ -303,5 +394,5 @@ total_customers,total_sales,average_sales
 
 ## Future enhancements
 
-Later phases may add Parquet partitioning, Terraform, Aurora, AWS SCT, and AWS
-DMS. They are intentionally outside Phases 1 and 2.
+Later phases may add Terraform, Aurora, AWS SCT, and AWS DMS. They are
+intentionally outside the current implementation.

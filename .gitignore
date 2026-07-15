@@ -9,4 +9,16 @@ venv/
 *.zip
 build/
 local_buckets/
+.terraform/
+*.tfstate
+*.tfstate.*
+*.tfplan
+crash.log
+crash.*.log
+override.tf
+override.tf.json
+*_override.tf
+*_override.tf.json
+backend.hcl
+terraform.tfvars
 

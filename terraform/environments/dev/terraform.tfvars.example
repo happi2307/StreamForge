@@ -1,0 +1,18 @@
+owner       = "your-name"
+cost_center = "portfolio"
+
+# Set these overrides before importing existing live resources so Terraform
+# adopts the current names instead of proposing replacements.
+bucket_name_overrides = {
+  raw            = "streamforge-raw-ACCOUNTID-us-east-1"
+  clean          = "streamforge-clean-ACCOUNTID-us-east-1"
+  rejected       = "streamforge-rejected-ACCOUNTID-us-east-1"
+  metadata       = "streamforge-metadata-ACCOUNTID-us-east-1"
+  curated        = "streamforge-curated-ACCOUNTID-us-east-1"
+  quarantine     = "streamforge-quarantine-ACCOUNTID-us-east-1"
+  athena_results = "streamforge-athena-results-ACCOUNTID-us-east-1"
+}
+
+# Set this to the existing key alias or adopt the new default alias.
+kms_alias_name = "alias/streamforge-phase1"
+kms_description = "StreamForge Phase 1 S3 encryption key"

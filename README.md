@@ -5,7 +5,8 @@ uploaded to Amazon S3. Phase 1 routes S3 events through EventBridge to Lambda,
 then stores valid and rejected rows separately. Phase 1 now also writes a
 sidecar processing manifest for each source file so downstream phases can use
 stable lineage metadata. Phase 2 adds AWS Glue and Athena so the cleaned data
-can be queried with SQL.
+can be queried with SQL. Phase 4 begins the Terraform adoption of the deployed
+AWS footprint so the platform can be recreated and governed as code.
 
 ## Phase 1 architecture
 
@@ -24,6 +25,21 @@ See [the architecture document](docs/architecture.md) for more detail.
 - AWS Glue Data Catalog
 - AWS Glue Crawler
 - Amazon Athena
+- AWS Key Management Service (KMS)
+- Terraform
+
+## Phase 4 foundation
+
+Track A introduces the initial Terraform adoption layout:
+
+- `terraform/bootstrap/backend`
+- `terraform/environments/dev`
+- `terraform/modules/kms`
+- `terraform/modules/s3`
+
+The current Track A implementation focuses on backend bootstrap plus KMS and S3
+resource adoption. See the import guide in
+`docs/terraform-import-guide.md`.
 
 ## Local setup
 

@@ -12,6 +12,9 @@ The initial implementation in this repository focuses on:
 
 - backend bootstrap scaffolding
 - reusable KMS and S3 modules
+- a reusable Phase 1 runtime module for IAM, Lambda, and EventBridge
+- a reusable Phase 2 analytics module for Glue and Athena
+- a reusable Phase 3 curated analytics module for Glue ETL and Athena
 - a `dev` environment root module
 
 Use the `dev` environment first to import and reconcile the currently deployed

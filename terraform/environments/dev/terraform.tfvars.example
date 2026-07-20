@@ -16,3 +16,28 @@ bucket_name_overrides = {
 # Set this to the existing key alias or adopt the new default alias.
 kms_alias_name = "alias/streamforge-phase1"
 kms_description = "StreamForge Phase 1 S3 encryption key"
+
+# Keep these aligned with the currently deployed Phase 1 runtime resources when
+# adopting an existing environment.
+lambda_function_name = "streamforge-processor"
+lambda_description   = ""
+lambda_role_name     = "streamforge-lambda-role"
+lambda_inline_policy_name = "streamforge-s3-kms"
+event_rule_name      = "streamforge-raw-uploads"
+event_rule_description = ""
+
+# Keep these aligned with the currently deployed Phase 2 analytics resources
+# when adopting an existing environment.
+glue_database_name = "streamforge_clean_db"
+glue_crawler_role_name = "streamforge-glue-crawler-role"
+glue_crawler_inline_policy_name = "streamforge-glue-clean-read"
+glue_crawler_name = "streamforge-clean-crawler"
+athena_workgroup_name = "streamforge-phase2"
+
+# Keep these aligned with the currently deployed Phase 3 curated analytics
+# resources when adopting an existing environment.
+phase3_glue_job_role_name = "streamforge-glue-transform-role"
+phase3_glue_job_inline_policy_name = "streamforge-phase3-data-access"
+phase3_glue_job_name = "streamforge-transform-customers"
+phase3_athena_workgroup_name = "streamforge-phase3"
+phase3_curated_table_name = "customers_curated"

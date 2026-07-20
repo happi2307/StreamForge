@@ -23,6 +23,20 @@ The first Terraform environment models:
 - curated bucket
 - quarantine bucket
 - Athena results bucket
+- Phase 1 Lambda IAM role and inline policy
+- Phase 1 Lambda function
+- raw-upload EventBridge rule and target
+- EventBridge invoke permission on the Lambda
+- raw-bucket EventBridge notification toggle
+- Phase 2 Glue crawler IAM role and policy
+- Phase 2 Glue database
+- Phase 2 Glue crawler
+- Phase 2 Athena workgroup
+- Phase 2 canonical Glue table
+- Phase 3 Glue transform IAM role and policy
+- Phase 3 Glue job
+- Phase 3 Athena workgroup
+- Phase 3 curated Glue table
 
 ## Workflow
 
@@ -62,5 +76,54 @@ Import the related bucket sub-resources after the base bucket resources:
 - `aws_s3_bucket_server_side_encryption_configuration`
 - `aws_s3_bucket_policy`
 
-Track A intentionally stops after storage and encryption adoption. Lambda,
-EventBridge, Glue, and Athena should be brought in after this layer is stable.
+Track A now also includes the Phase 1 runtime layer. Import those resources
+after the storage layer is stable:
+
+```powershell
+terraform import module.phase1_runtime.aws_iam_role.lambda streamforge-lambda-role
+terraform import module.phase1_runtime.aws_iam_role_policy_attachment.basic_execution streamforge-lambda-role/arn:aws:iam::aws:policy/service-role/AWSLambdaBasicExecutionRole
+terraform import module.phase1_runtime.aws_iam_role_policy.data_plane streamforge-lambda-role:streamforge-s3-kms
+terraform import module.phase1_runtime.aws_lambda_function.this streamforge-processor
+terraform import module.phase1_runtime.aws_cloudwatch_event_rule.raw_uploads streamforge-raw-uploads
+terraform import module.phase1_runtime.aws_cloudwatch_event_target.lambda streamforge-raw-uploads/1
+terraform import module.phase1_runtime.aws_lambda_permission.allow_eventbridge streamforge-processor/eventbridge-invoke
+terraform import module.phase1_runtime.aws_s3_bucket_notification.raw_eventbridge streamforge-raw-ACCOUNTID-us-east-1
+```
+
+Before planning or applying the runtime layer, make sure `lambda_package_path`
+points to a real ZIP package for the Phase 1 Lambda. A simple way to rebuild it
+is the existing Phase 1 packaging flow:
+
+```powershell
+pip install -r lambda/requirements.txt -t build
+Copy-Item lambda/handler.py,lambda/validator.py,lambda/metadata.py build
+Compress-Archive -Path build\* -DestinationPath function.zip -Force
+```
+
+After the runtime layer is stable, import the Phase 2 analytics resources:
+
+```powershell
+terraform import module.phase2_analytics.aws_iam_role.crawler streamforge-glue-crawler-role
+terraform import module.phase2_analytics.aws_iam_role_policy_attachment.glue_service_role streamforge-glue-crawler-role/arn:aws:iam::aws:policy/service-role/AWSGlueServiceRole
+terraform import module.phase2_analytics.aws_iam_role_policy.crawler_data_access streamforge-glue-crawler-role:streamforge-glue-clean-read
+terraform import module.phase2_analytics.aws_glue_catalog_database.this 108379846489:streamforge_clean_db
+terraform import module.phase2_analytics.aws_glue_crawler.this streamforge-clean-crawler
+terraform import module.phase2_analytics.aws_athena_workgroup.this streamforge-phase2
+terraform import module.phase2_analytics.aws_glue_catalog_table.canonical_customers 108379846489:streamforge_clean_db:customers
+```
+
+The crawler-created helper table (for example
+`streamforge_clean_108379846489_us_east_1`) can remain unmanaged if you only
+want Terraform to own the canonical analytics interface.
+
+After the Phase 2 analytics layer is stable, import the Phase 3 curated
+resources:
+
+```powershell
+terraform import module.phase3_curated.aws_iam_role.job streamforge-glue-transform-role
+terraform import module.phase3_curated.aws_iam_role_policy_attachment.glue_service_role streamforge-glue-transform-role/arn:aws:iam::aws:policy/service-role/AWSGlueServiceRole
+terraform import module.phase3_curated.aws_iam_role_policy.job_data_access streamforge-glue-transform-role:streamforge-phase3-data-access
+terraform import module.phase3_curated.aws_glue_job.this streamforge-transform-customers
+terraform import module.phase3_curated.aws_athena_workgroup.this streamforge-phase3
+terraform import module.phase3_curated.aws_glue_catalog_table.curated 108379846489:streamforge_clean_db:customers_curated
+```

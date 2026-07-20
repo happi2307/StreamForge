@@ -36,9 +36,14 @@ Track A introduces the initial Terraform adoption layout:
 - `terraform/environments/dev`
 - `terraform/modules/kms`
 - `terraform/modules/s3`
+- `terraform/modules/phase1_runtime`
+- `terraform/modules/phase2_analytics`
+- `terraform/modules/phase3_curated`
 
-The current Track A implementation focuses on backend bootstrap plus KMS and S3
-resource adoption. See the import guide in
+The current Track A implementation focuses on backend bootstrap, KMS/S3
+adoption, the Phase 1 IAM/Lambda/EventBridge runtime layer, and the Phase 2
+Glue/Athena analytics layer, plus the Phase 3 curated Glue/Athena layer. See
+the import guide in
 `docs/terraform-import-guide.md`.
 
 ## Local setup

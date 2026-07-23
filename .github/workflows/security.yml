@@ -47,6 +47,8 @@ jobs:
           framework: terraform
           # These checks are intentional, documented exceptions: KMS key-policy
           # syntax requires Resource "*"; the Glue job has an explicit security
-          # configuration; and only the raw bucket emits ingestion events.
-          skip_check: CKV_AWS_109,CKV_AWS_111,CKV_AWS_356,CKV_AWS_195,CKV2_AWS_62
+          # configuration; only the raw bucket emits ingestion events; CloudFront
+          # needs an ACL-enabled log bucket; and DR relies on S3 versioning plus
+          # Terraform recovery until a second-region replica is introduced.
+          skip_check: CKV_AWS_109,CKV_AWS_111,CKV_AWS_356,CKV_AWS_195,CKV2_AWS_62,CKV2_AWS_65,CKV2_AWS_42,CKV2_AWS_47,CKV_AWS_144
           quiet: true

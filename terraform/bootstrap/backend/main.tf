@@ -11,6 +11,14 @@ locals {
     data.aws_region.current.name,
   )
 
+  backend_access_logs_bucket_name = format(
+    "%s-%s-tfstate-access-logs-%s-%s",
+    var.project_name,
+    var.environment,
+    data.aws_caller_identity.current.account_id,
+    data.aws_region.current.name,
+  )
+
   lock_table_name = var.lock_table_name != "" ? var.lock_table_name : format(
     "%s-%s-terraform-locks",
     var.project_name,
@@ -46,12 +54,20 @@ module "state_bucket" {
 
   bucket_name                        = local.backend_bucket_name
   kms_key_arn                        = module.kms.key_arn
+  access_log_bucket_name             = module.access_logs.bucket_name
   current_version_expiration_days    = null
   noncurrent_version_expiration_days = 180
   tags = merge(local.common_tags, {
     Name    = local.backend_bucket_name
     Service = "terraform-state"
   })
+}
+
+module "access_logs" {
+  source = "../../modules/s3_access_logs"
+
+  bucket_name = local.backend_access_logs_bucket_name
+  tags        = merge(local.common_tags, { Service = "terraform-state-access-logs" })
 }
 
 resource "aws_dynamodb_table" "terraform_locks" {

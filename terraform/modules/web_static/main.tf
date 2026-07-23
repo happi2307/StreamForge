@@ -50,6 +50,20 @@ resource "aws_s3_bucket_server_side_encryption_configuration" "this" {
   }
 }
 
+resource "aws_s3_bucket_lifecycle_configuration" "this" {
+  bucket = aws_s3_bucket.this.id
+
+  rule {
+    id     = "manage-static-assets"
+    status = "Enabled"
+
+    filter {}
+
+    abort_incomplete_multipart_upload { days_after_initiation = 7 }
+    noncurrent_version_expiration { noncurrent_days = 30 }
+  }
+}
+
 resource "aws_s3_bucket" "access_logs" {
   bucket = "${var.bucket_name}-logs"
   tags   = merge(var.tags, { Service = "dashboard-access-logs" })
@@ -262,6 +276,18 @@ resource "aws_wafv2_web_acl" "dashboard" {
   }
 
   tags = merge(var.tags, { Service = "dashboard-waf" })
+}
+
+resource "aws_cloudwatch_log_group" "waf" {
+  name              = "aws-waf-logs-${var.project_name}-${var.environment}-dashboard"
+  retention_in_days = 365
+  kms_key_id        = var.kms_key_arn
+  tags              = merge(var.tags, { Service = "dashboard-waf-logs" })
+}
+
+resource "aws_wafv2_web_acl_logging_configuration" "dashboard" {
+  resource_arn            = aws_wafv2_web_acl.dashboard.arn
+  log_destination_configs = [aws_cloudwatch_log_group.waf.arn]
 }
 
 resource "aws_cloudfront_distribution" "this" {

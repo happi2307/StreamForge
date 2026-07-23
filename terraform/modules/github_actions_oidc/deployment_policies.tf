@@ -52,6 +52,7 @@ data "aws_iam_policy_document" "state_and_storage" {
       "s3:GetBucketLocation",
       "s3:GetBucketLogging",
       "s3:GetBucketNotification",
+      "s3:GetBucketObjectLockConfiguration",
       "s3:GetBucketOwnershipControls",
       "s3:GetBucketPolicy",
       "s3:GetBucketPolicyStatus",

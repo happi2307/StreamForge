@@ -57,6 +57,7 @@ data "aws_iam_policy_document" "state_and_storage" {
       "s3:GetBucketPolicyStatus",
       "s3:GetBucketPublicAccessBlock",
       "s3:GetBucketRequestPayment",
+      "s3:GetReplicationConfiguration",
       "s3:GetBucketTagging",
       "s3:GetBucketVersioning",
       "s3:GetBucketWebsite",

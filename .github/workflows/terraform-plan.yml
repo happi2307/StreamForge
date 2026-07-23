@@ -20,6 +20,12 @@ jobs:
     name: Dev plan
     environment: dev
     runs-on: ubuntu-24.04
+    env:
+      TF_VAR_owner: ${{ vars.TF_VAR_OWNER }}
+      TF_VAR_cost_center: ${{ vars.TF_VAR_COST_CENTER }}
+      TF_VAR_kms_alias_name: ${{ vars.TF_VAR_KMS_ALIAS_NAME }}
+      TF_VAR_kms_description: ${{ vars.TF_VAR_KMS_DESCRIPTION }}
+      TF_VAR_bucket_name_overrides: ${{ vars.TF_VAR_BUCKET_NAME_OVERRIDES }}
     defaults:
       run:
         working-directory: terraform/environments/dev

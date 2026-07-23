@@ -1,6 +1,10 @@
 data "aws_region" "current" {}
 
+data "aws_canonical_user_id" "current" {}
+
 locals {
+  cloudfront_log_delivery_canonical_user_id = "c4c1ede66af53448b93c283ce9448c4ba468c9432aa01d700d3878632f77d2d0"
+
   asset_content_types = {
     "index.html" = "text/html"
     "styles.css" = "text/css"
@@ -46,6 +50,112 @@ resource "aws_s3_bucket_server_side_encryption_configuration" "this" {
   }
 }
 
+resource "aws_s3_bucket" "access_logs" {
+  bucket = "${var.bucket_name}-logs"
+  tags   = merge(var.tags, { Service = "dashboard-access-logs" })
+}
+
+resource "aws_s3_bucket_public_access_block" "access_logs" {
+  bucket = aws_s3_bucket.access_logs.id
+
+  block_public_acls       = true
+  block_public_policy     = true
+  ignore_public_acls      = true
+  restrict_public_buckets = true
+}
+
+# CloudFront standard logs require ACLs; BucketOwnerPreferred preserves owner
+# control while allowing the CloudFront log-delivery canonical user to write.
+resource "aws_s3_bucket_ownership_controls" "access_logs" {
+  bucket = aws_s3_bucket.access_logs.id
+
+  rule { object_ownership = "BucketOwnerPreferred" }
+}
+
+resource "aws_s3_bucket_versioning" "access_logs" {
+  bucket = aws_s3_bucket.access_logs.id
+
+  versioning_configuration { status = "Enabled" }
+}
+
+resource "aws_s3_bucket_server_side_encryption_configuration" "access_logs" {
+  bucket = aws_s3_bucket.access_logs.id
+
+  rule {
+    apply_server_side_encryption_by_default {
+      kms_master_key_id = var.kms_key_arn
+      sse_algorithm     = "aws:kms"
+    }
+    bucket_key_enabled = true
+  }
+}
+
+resource "aws_s3_bucket_lifecycle_configuration" "access_logs" {
+  bucket = aws_s3_bucket.access_logs.id
+
+  rule {
+    id     = "expire-access-logs"
+    status = "Enabled"
+
+    filter {}
+
+    expiration { days = 90 }
+
+    noncurrent_version_expiration { noncurrent_days = 30 }
+  }
+}
+
+resource "aws_s3_bucket_acl" "access_logs" {
+  bucket = aws_s3_bucket.access_logs.id
+
+  access_control_policy {
+    grant {
+      grantee {
+        type = "CanonicalUser"
+        id   = data.aws_canonical_user_id.current.id
+      }
+      permission = "FULL_CONTROL"
+    }
+
+    grant {
+      grantee {
+        type = "CanonicalUser"
+        id   = local.cloudfront_log_delivery_canonical_user_id
+      }
+      permission = "FULL_CONTROL"
+    }
+
+    owner { id = data.aws_canonical_user_id.current.id }
+  }
+
+  depends_on = [aws_s3_bucket_ownership_controls.access_logs]
+}
+
+data "aws_iam_policy_document" "access_logs" {
+  statement {
+    sid       = "DenyInsecureTransport"
+    effect    = "Deny"
+    actions   = ["s3:*"]
+    resources = [aws_s3_bucket.access_logs.arn, "${aws_s3_bucket.access_logs.arn}/*"]
+
+    principals {
+      type        = "*"
+      identifiers = ["*"]
+    }
+
+    condition {
+      test     = "Bool"
+      variable = "aws:SecureTransport"
+      values   = ["false"]
+    }
+  }
+}
+
+resource "aws_s3_bucket_policy" "access_logs" {
+  bucket = aws_s3_bucket.access_logs.id
+  policy = data.aws_iam_policy_document.access_logs.json
+}
+
 resource "aws_cloudfront_origin_access_control" "this" {
   name                              = "${var.project_name}-${var.environment}-dashboard-oac"
   description                       = "CloudFront access for the private StreamForge dashboard bucket."
@@ -80,12 +190,77 @@ resource "aws_cloudfront_response_headers_policy" "security" {
   }
 }
 
+resource "aws_wafv2_web_acl" "dashboard" {
+  name  = "${var.project_name}-${var.environment}-dashboard"
+  scope = "CLOUDFRONT"
+
+  default_action {
+    allow {}
+  }
+
+  rule {
+    name     = "AWSManagedRulesCommonRuleSet"
+    priority = 10
+
+    override_action {
+      none {}
+    }
+
+    statement {
+      managed_rule_group_statement {
+        name        = "AWSManagedRulesCommonRuleSet"
+        vendor_name = "AWS"
+      }
+    }
+
+    visibility_config {
+      cloudwatch_metrics_enabled = true
+      metric_name                = "AWSManagedRulesCommonRuleSet"
+      sampled_requests_enabled   = true
+    }
+  }
+
+  rule {
+    name     = "AWSManagedRulesKnownBadInputsRuleSet"
+    priority = 20
+
+    override_action {
+      none {}
+    }
+
+    statement {
+      managed_rule_group_statement {
+        name        = "AWSManagedRulesKnownBadInputsRuleSet"
+        vendor_name = "AWS"
+      }
+    }
+
+    visibility_config {
+      cloudwatch_metrics_enabled = true
+      metric_name                = "AWSManagedRulesKnownBadInputsRuleSet"
+      sampled_requests_enabled   = true
+    }
+  }
+
+  visibility_config {
+    cloudwatch_metrics_enabled = true
+    metric_name                = "${var.project_name}-${var.environment}-dashboard"
+    sampled_requests_enabled   = true
+  }
+
+  tags = merge(var.tags, { Service = "dashboard-waf" })
+}
+
 resource "aws_cloudfront_distribution" "this" {
+  #checkov:skip=CKV_AWS_174: The CloudFront default certificate is required while this project has no registered custom domain; AWS only allows TLSv1 with that certificate. A custom domain will use ACM in us-east-1 and TLSv1.2_2021.
+  #checkov:skip=CKV_AWS_374: This authenticated dashboard is intentionally globally available; Cognito, private S3 origin access control, and WAF protect access rather than geographically blocking users.
+  #checkov:skip=CKV_AWS_310: The single private S3 origin is highly durable; origin failover requires a separately replicated regional origin and is outside the current recovery design.
   enabled             = true
   is_ipv6_enabled     = true
   comment             = "${var.project_name} ${var.environment} dashboard"
   default_root_object = "index.html"
   price_class         = "PriceClass_100"
+  web_acl_id          = aws_wafv2_web_acl.dashboard.arn
 
   origin {
     domain_name              = aws_s3_bucket.this.bucket_regional_domain_name
@@ -110,8 +285,17 @@ resource "aws_cloudfront_distribution" "this" {
   restrictions {
     geo_restriction { restriction_type = "none" }
   }
+
+  logging_config {
+    bucket          = aws_s3_bucket.access_logs.bucket_domain_name
+    include_cookies = false
+    prefix          = "cloudfront/"
+  }
+
   viewer_certificate { cloudfront_default_certificate = true }
   tags = var.tags
+
+  depends_on = [aws_s3_bucket_acl.access_logs]
 }
 
 data "aws_iam_policy_document" "bucket" {

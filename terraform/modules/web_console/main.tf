@@ -68,6 +68,13 @@ resource "aws_cloudwatch_log_group" "lambda" {
   tags              = var.tags
 }
 
+resource "aws_cloudwatch_log_group" "api" {
+  name              = "/aws/apigateway/${var.project_name}-${var.environment}-dashboard-api"
+  retention_in_days = 365
+  kms_key_id        = var.kms_key_arn
+  tags              = var.tags
+}
+
 resource "aws_lambda_function" "api" {
   #checkov:skip=CKV_AWS_116: API Gateway invokes this function synchronously; there is no asynchronous payload for a Lambda DLQ to retain.
   #checkov:skip=CKV_AWS_117: The API only accesses managed AWS services and does not need private network resources.
@@ -189,6 +196,21 @@ resource "aws_apigatewayv2_stage" "default" {
   name        = "$default"
   auto_deploy = true
   tags        = var.tags
+
+  access_log_settings {
+    destination_arn = aws_cloudwatch_log_group.api.arn
+    format = jsonencode({
+      request_id        = "$context.requestId"
+      source_ip         = "$context.identity.sourceIp"
+      request_time      = "$context.requestTime"
+      http_method       = "$context.httpMethod"
+      route_key         = "$context.routeKey"
+      status            = "$context.status"
+      protocol          = "$context.protocol"
+      response_length   = "$context.responseLength"
+      integration_error = "$context.integrationErrorMessage"
+    })
+  }
 }
 
 resource "aws_lambda_permission" "api_gateway" {

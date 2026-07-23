@@ -105,10 +105,15 @@ module "kms" {
       sid        = "AllowCloudFrontDashboardRead"
       principals = ["cloudfront.amazonaws.com"]
     },
+    {
+      sid        = "AllowCloudFrontLogDelivery"
+      principals = ["delivery.logs.amazonaws.com"]
+    },
   ]
   cloudwatch_logs_encryption_context_arns = [
     "arn:aws:logs:${data.aws_region.current.name}:${data.aws_caller_identity.current.account_id}:log-group:/aws/lambda/${var.lambda_function_name}",
     "arn:aws:logs:${data.aws_region.current.name}:${data.aws_caller_identity.current.account_id}:log-group:/aws/lambda/${var.dashboard_lambda_function_name}",
+    "arn:aws:logs:${data.aws_region.current.name}:${data.aws_caller_identity.current.account_id}:log-group:/aws/apigateway/${var.project_name}-${var.environment}-dashboard-api",
   ]
   tags = merge(local.common_tags, { Name = var.kms_alias_name })
 }

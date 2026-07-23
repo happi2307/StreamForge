@@ -46,6 +46,7 @@ data "aws_iam_policy_document" "state_and_storage" {
       "s3:DeleteBucketWebsite",
       "s3:DeleteObject",
       "s3:DeleteObjectVersion",
+      "s3:GetAccelerateConfiguration",
       "s3:GetBucketAcl",
       "s3:GetBucketCORS",
       "s3:GetBucketLocation",
@@ -115,6 +116,7 @@ data "aws_iam_policy_document" "keys_and_iam" {
       "kms:GetKeyPolicy",
       "kms:GetKeyRotationStatus",
       "kms:ListGrants",
+      "kms:ListResourceTags",
       "kms:PutKeyPolicy",
       "kms:RevokeGrant",
       "kms:TagResource",
@@ -261,6 +263,7 @@ data "aws_iam_policy_document" "runtime_and_observability" {
       "events:DescribeRule",
       "events:ListRuleNamesByTarget",
       "events:ListRules",
+      "events:ListTagsForResource",
       "events:ListTargetsByRule",
       "events:PutRule",
       "events:PutTargets",
@@ -362,7 +365,6 @@ data "aws_iam_policy_document" "analytics_and_dashboard" {
       "apigateway:PUT",
       "cognito-idp:DescribeUserPool",
       "cognito-idp:DescribeUserPoolClient",
-      "cognito-idp:DescribeUserPoolDomain",
       "cognito-idp:GetUserPoolMfaConfig",
       "cognito-idp:ListTagsForResource",
       "cognito-idp:UpdateUserPool",
@@ -372,6 +374,13 @@ data "aws_iam_policy_document" "analytics_and_dashboard" {
       "arn:${data.aws_partition.current.partition}:apigateway:${data.aws_region.current.name}::/apis/*",
       "arn:${data.aws_partition.current.partition}:cognito-idp:${data.aws_region.current.name}:${data.aws_caller_identity.current.account_id}:userpool/*",
     ]
+  }
+
+  statement {
+    sid       = "ReadCognitoUserPoolDomains"
+    effect    = "Allow"
+    actions   = ["cognito-idp:DescribeUserPoolDomain"]
+    resources = ["*"]
   }
 
   statement {

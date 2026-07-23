@@ -1,0 +1,5 @@
+bucket         = "streamforge-shared-tfstate-ACCOUNTID-us-east-1"
+key            = "dev/terraform.tfstate"
+region         = "us-east-1"
+dynamodb_table = "streamforge-shared-terraform-locks"
+encrypt        = true

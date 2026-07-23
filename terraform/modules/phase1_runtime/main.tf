@@ -85,22 +85,75 @@ resource "aws_iam_role_policy_attachment" "basic_execution" {
   policy_arn = "arn:aws:iam::aws:policy/service-role/AWSLambdaBasicExecutionRole"
 }
 
+resource "aws_iam_role_policy_attachment" "xray_write" {
+  role       = aws_iam_role.lambda.name
+  policy_arn = "arn:aws:iam::aws:policy/AWSXRayDaemonWriteAccess"
+}
+
 resource "aws_iam_role_policy" "data_plane" {
   name   = var.lambda_inline_policy_name
   role   = aws_iam_role.lambda.id
   policy = data.aws_iam_policy_document.lambda_data_plane.json
 }
 
+resource "aws_sqs_queue" "lambda_async_dlq" {
+  name                              = "${var.lambda_function_name}-async-dlq"
+  kms_master_key_id                 = var.kms_key_arn
+  kms_data_key_reuse_period_seconds = 300
+  message_retention_seconds         = var.lambda_dead_letter_queue_message_retention_seconds
+  receive_wait_time_seconds         = 20
+  tags                              = var.tags
+}
+
+data "aws_iam_policy_document" "lambda_async_dlq" {
+  statement {
+    sid    = "AllowLambdaFailureDelivery"
+    effect = "Allow"
+
+    principals {
+      type        = "Service"
+      identifiers = ["lambda.amazonaws.com"]
+    }
+
+    actions   = ["sqs:SendMessage"]
+    resources = [aws_sqs_queue.lambda_async_dlq.arn]
+
+    condition {
+      test     = "ArnEquals"
+      variable = "aws:SourceArn"
+      values   = [aws_lambda_function.this.arn]
+    }
+  }
+}
+
+resource "aws_sqs_queue_policy" "lambda_async_dlq" {
+  queue_url = aws_sqs_queue.lambda_async_dlq.id
+  policy    = data.aws_iam_policy_document.lambda_async_dlq.json
+}
+
+#checkov:skip=CKV_AWS_117: This ingestion Lambda accesses only managed AWS services; a VPC would add NAT/endpoints without reducing data-plane exposure.
+#checkov:skip=CKV_AWS_272: Code signing is deferred until CI signs release artifacts; CI builds packages from tracked source and the deployment role is restricted.
 resource "aws_lambda_function" "this" {
-  function_name = var.lambda_function_name
-  description   = var.lambda_description
-  role          = aws_iam_role.lambda.arn
-  runtime       = var.lambda_runtime
-  handler       = var.lambda_handler
-  filename      = var.lambda_package_path
-  publish       = false
-  timeout       = var.lambda_timeout
-  memory_size   = var.lambda_memory_size
+  function_name                  = var.lambda_function_name
+  description                    = var.lambda_description
+  role                           = aws_iam_role.lambda.arn
+  runtime                        = var.lambda_runtime
+  handler                        = var.lambda_handler
+  filename                       = var.lambda_package_path
+  source_code_hash               = filebase64sha256(var.lambda_package_path)
+  publish                        = false
+  timeout                        = var.lambda_timeout
+  memory_size                    = var.lambda_memory_size
+  kms_key_arn                    = var.kms_key_arn
+  reserved_concurrent_executions = var.lambda_reserved_concurrent_executions
+
+  dead_letter_config {
+    target_arn = aws_sqs_queue.lambda_async_dlq.arn
+  }
+
+  tracing_config {
+    mode = "Active"
+  }
 
   environment {
     variables = {
@@ -116,6 +169,7 @@ resource "aws_lambda_function" "this" {
 
   depends_on = [
     aws_iam_role_policy_attachment.basic_execution,
+    aws_iam_role_policy_attachment.xray_write,
     aws_iam_role_policy.data_plane,
   ]
 
@@ -124,6 +178,13 @@ resource "aws_lambda_function" "this" {
       filename,
     ]
   }
+}
+
+resource "aws_cloudwatch_log_group" "lambda" {
+  name              = "/aws/lambda/${var.lambda_function_name}"
+  retention_in_days = var.lambda_log_retention_days
+  kms_key_id        = var.kms_key_arn
+  tags              = var.tags
 }
 
 resource "aws_cloudwatch_event_rule" "raw_uploads" {
@@ -145,6 +206,15 @@ resource "aws_cloudwatch_event_target" "lambda" {
   rule      = aws_cloudwatch_event_rule.raw_uploads.name
   target_id = var.event_target_id
   arn       = aws_lambda_function.this.arn
+
+  dead_letter_config {
+    arn = var.eventbridge_dead_letter_queue_arn
+  }
+
+  retry_policy {
+    maximum_event_age_in_seconds = var.eventbridge_maximum_event_age_in_seconds
+    maximum_retry_attempts       = var.eventbridge_maximum_retry_attempts
+  }
 }
 
 resource "aws_lambda_permission" "allow_eventbridge" {

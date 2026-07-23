@@ -176,6 +176,12 @@ variable "max_invalid_percent" {
   default     = "10"
 }
 
+variable "pipeline_metric_namespace" {
+  description = "CloudWatch namespace used by the Glue job for pipeline-quality metrics."
+  type        = string
+  default     = "StreamForge/Pipeline"
+}
+
 variable "tags" {
   description = "Tags applied to taggable Phase 3 resources."
   type        = map(string)

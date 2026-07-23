@@ -70,3 +70,25 @@ output "phase3_curated_table_name" {
   description = "Name of the Phase 3 curated Glue table."
   value       = module.phase3_curated.curated_table_name
 }
+
+output "operations_alert_topic_arn" {
+  description = "ARN of the SNS topic for operational alerts."
+  value       = module.phase4_operations.alert_topic_arn
+}
+
+output "eventbridge_dead_letter_queue_arn" {
+  description = "ARN of the DLQ for undeliverable raw-upload events."
+  value       = module.phase4_operations.eventbridge_dead_letter_queue_arn
+}
+
+output "operations_dashboard_name" {
+  description = "Name of the CloudWatch dashboard for pipeline health."
+  value       = module.phase4_operations.dashboard_name
+}
+
+output "web_console_api_endpoint" { value = module.web_console.api_endpoint }
+output "web_console_user_pool_id" { value = module.web_console.user_pool_id }
+output "web_console_user_pool_client_id" { value = module.web_console.user_pool_client_id }
+output "web_console_cognito_domain" { value = module.web_console.cognito_domain }
+output "web_dashboard_url" { value = module.web_static.dashboard_origin }
+output "web_dashboard_bucket_name" { value = module.web_static.bucket_name }

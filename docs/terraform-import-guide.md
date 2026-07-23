@@ -90,6 +90,20 @@ terraform import module.phase1_runtime.aws_lambda_permission.allow_eventbridge s
 terraform import module.phase1_runtime.aws_s3_bucket_notification.raw_eventbridge streamforge-raw-ACCOUNTID-us-east-1
 ```
 
+## Track B prerequisite import
+
+Track B explicitly manages the existing Lambda CloudWatch log group so it can
+apply KMS encryption and retention. Import it before the first Track B apply:
+
+```powershell
+terraform -chdir=terraform/environments/dev import module.phase1_runtime.aws_cloudwatch_log_group.lambda /aws/lambda/streamforge-processor
+```
+
+The SNS topic, SQS dead-letter queue, alarms, dashboard, and failure event rules
+are new Track B resources and do not need importing. Set
+`operations_alert_email` in the ignored `terraform.tfvars` file before apply;
+AWS will send a confirmation email to that recipient.
+
 Before planning or applying the runtime layer, make sure `lambda_package_path`
 points to a real ZIP package for the Phase 1 Lambda. A simple way to rebuild it
 is the existing Phase 1 packaging flow:

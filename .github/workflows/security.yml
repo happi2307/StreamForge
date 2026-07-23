@@ -15,7 +15,7 @@ jobs:
     name: Secret detection
     runs-on: ubuntu-24.04
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
         with:
           fetch-depth: 0
       - uses: gitleaks/gitleaks-action@v2
@@ -26,7 +26,7 @@ jobs:
     name: Filesystem vulnerabilities
     runs-on: ubuntu-24.04
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
       - uses: aquasecurity/trivy-action@v0.36.0
         with:
           scan-type: fs
@@ -38,7 +38,7 @@ jobs:
     name: Terraform policy checks
     runs-on: ubuntu-24.04
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
       - uses: bridgecrewio/checkov-action@v12
         with:
           directory: terraform

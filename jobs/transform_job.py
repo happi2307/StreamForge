@@ -19,6 +19,7 @@ except ImportError:  # pragma: no cover - used by Glue when helper module is fla
 
 @dataclass(frozen=True)
 class JobConfig:
+    job_name: str
     input_bucket: str
     metadata_bucket: str
     curated_bucket: str
@@ -33,6 +34,8 @@ class JobConfig:
     pipeline_version: str
     max_invalid_percent: float
     date_column: str | None
+    environment: str
+    metrics_namespace: str
 
 
 def _parse_args(argv: list[str] | None = None) -> JobConfig:
@@ -52,8 +55,11 @@ def _parse_args(argv: list[str] | None = None) -> JobConfig:
     parser.add_argument("--PIPELINE_VERSION", default="3.0.0")
     parser.add_argument("--MAX_INVALID_PERCENT", type=float, default=10.0)
     parser.add_argument("--DATE_COLUMN", default="")
+    parser.add_argument("--ENVIRONMENT", default="dev")
+    parser.add_argument("--METRICS_NAMESPACE", default="StreamForge/Pipeline")
     args, _unknown = parser.parse_known_args(argv)
     return JobConfig(
+        job_name=args.JOB_NAME,
         input_bucket=args.INPUT_BUCKET,
         metadata_bucket=args.METADATA_BUCKET,
         curated_bucket=args.CURATED_BUCKET,
@@ -68,6 +74,8 @@ def _parse_args(argv: list[str] | None = None) -> JobConfig:
         pipeline_version=args.PIPELINE_VERSION,
         max_invalid_percent=args.MAX_INVALID_PERCENT,
         date_column=args.DATE_COLUMN or None,
+        environment=args.ENVIRONMENT,
+        metrics_namespace=args.METRICS_NAMESPACE,
     )
 
 
@@ -120,6 +128,39 @@ def _write_dataset(
     if format_name == "parquet":
         writer = writer.option("compression", "snappy")
     writer.format(format_name).save(destination)
+
+
+def _publish_pipeline_metrics(
+    cloudwatch_client: Any, config: JobConfig, stats: dict[str, int]
+) -> None:
+    """Publish batch-level quality metrics without including customer data."""
+    dimensions = [
+        {"Name": "Environment", "Value": config.environment},
+        {"Name": "JobName", "Value": config.job_name},
+    ]
+    cloudwatch_client.put_metric_data(
+        Namespace=config.metrics_namespace,
+        MetricData=[
+            {
+                "MetricName": "RowsRead",
+                "Dimensions": dimensions,
+                "Unit": "Count",
+                "Value": stats["rows_read"],
+            },
+            {
+                "MetricName": "RowsWritten",
+                "Dimensions": dimensions,
+                "Unit": "Count",
+                "Value": stats["rows_written"],
+            },
+            {
+                "MetricName": "RowsQuarantined",
+                "Dimensions": dimensions,
+                "Unit": "Count",
+                "Value": stats["rows_quarantined"],
+            },
+        ],
+    )
 
 
 def run_job(config: JobConfig) -> dict[str, int]:
@@ -177,6 +218,13 @@ def run_job(config: JobConfig) -> dict[str, int]:
         partition_columns=["reason", "year", "month", "day"],
     )
 
+    stats = {
+        "rows_read": total_records,
+        "rows_written": len(curated_records),
+        "rows_quarantined": len(quarantined_records),
+    }
+    _publish_pipeline_metrics(boto3.client("cloudwatch"), config, stats)
+
     if should_fail_invalid_threshold(
         len(quarantined_records), total_records, config.max_invalid_percent
     ):
@@ -185,11 +233,7 @@ def run_job(config: JobConfig) -> dict[str, int]:
             f"{len(quarantined_records)} of {total_records} rows quarantined"
         )
 
-    return {
-        "rows_read": total_records,
-        "rows_written": len(curated_records),
-        "rows_quarantined": len(quarantined_records),
-    }
+    return stats
 
 
 def main(argv: list[str] | None = None) -> int:

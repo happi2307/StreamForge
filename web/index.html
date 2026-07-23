@@ -1,0 +1,102 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta name="theme-color" content="#07111f" />
+    <title>StreamForge | Data Operations</title>
+    <link rel="stylesheet" href="styles.css" />
+  </head>
+  <body>
+    <div class="background-orb orb-one"></div>
+    <div class="background-orb orb-two"></div>
+
+    <main class="shell">
+      <header class="topbar">
+        <a class="brand" href="/" aria-label="StreamForge home">
+          <span class="brand-mark" aria-hidden="true">S</span>
+          <span>StreamForge</span>
+        </a>
+        <span class="environment"><span class="status-dot"></span> Development</span>
+      </header>
+
+      <section class="hero">
+        <div>
+          <p class="eyebrow">Data operations console</p>
+          <h1>From raw CSV to trusted data.</h1>
+          <p class="hero-copy">Upload customer data securely. StreamForge validates every row, keeps a traceable audit trail, and separates clean data from exceptions.</p>
+        </div>
+        <div class="feature-list" aria-label="Pipeline features">
+          <span>Encrypted at rest</span><span>Schema validation</span><span>Event-driven</span>
+        </div>
+      </section>
+
+      <section class="console-card">
+        <div class="console-heading">
+          <div>
+            <p class="eyebrow">Pipeline intake</p>
+            <h2>Upload a customer CSV</h2>
+          </div>
+          <button id="login" class="button button-primary">Sign in to continue <span aria-hidden="true">→</span></button>
+        </div>
+
+        <section id="app" hidden>
+          <div class="upload-grid">
+            <label class="dropzone" for="file">
+              <input id="file" type="file" accept=".csv,text/csv" />
+              <span class="upload-icon" aria-hidden="true">↑</span>
+              <span class="dropzone-title">Choose a CSV file</span>
+              <span class="dropzone-copy">CSV files up to 10 MB</span>
+              <span id="selected-file" class="selected-file" hidden></span>
+            </label>
+            <div class="upload-action">
+              <p>Files are encrypted with AWS KMS and processed asynchronously.</p>
+              <button id="upload" class="button button-primary" disabled>Upload and process <span aria-hidden="true">→</span></button>
+            </div>
+          </div>
+        </section>
+
+        <div id="status-region" class="status-region" aria-live="polite" hidden>
+          <span id="status-icon" class="status-icon" aria-hidden="true"></span>
+          <p id="message"></p>
+        </div>
+
+        <section id="result" class="result-card" hidden aria-live="polite">
+          <div class="result-heading">
+            <div>
+              <p class="eyebrow">Processing result</p>
+              <h2 id="result-title">Batch complete</h2>
+            </div>
+            <span id="result-batch" class="batch-id"></span>
+          </div>
+
+          <div class="metrics" aria-label="Processing metrics">
+            <article><span>Total rows</span><strong id="total-records">—</strong></article>
+            <article class="metric-valid"><span>Valid rows</span><strong id="valid-records">—</strong></article>
+            <article class="metric-invalid"><span>Rejected rows</span><strong id="invalid-records">—</strong></article>
+          </div>
+
+          <div class="result-meta">
+            <span id="result-file"></span><span id="result-time"></span>
+          </div>
+
+          <div class="downloads">
+            <div>
+              <h3>Outputs</h3>
+              <p>Download links expire after 15 minutes.</p>
+            </div>
+            <div class="download-actions">
+              <a id="download-clean" class="button button-secondary" target="_blank" rel="noopener" hidden>Download clean data <span aria-hidden="true">↓</span></a>
+              <a id="download-rejected" class="button button-ghost" target="_blank" rel="noopener" hidden>Download rejected rows <span aria-hidden="true">↓</span></a>
+            </div>
+          </div>
+        </section>
+      </section>
+
+      <footer>StreamForge · Secure serverless data pipeline</footer>
+    </main>
+
+    <script src="config.js"></script>
+    <script src="app.js"></script>
+  </body>
+</html>

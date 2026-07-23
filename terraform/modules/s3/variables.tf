@@ -14,6 +14,18 @@ variable "tags" {
   default     = {}
 }
 
+variable "cors_rules" {
+  description = "Optional browser CORS rules for this bucket."
+  type = list(object({
+    allowed_headers = list(string)
+    allowed_methods = list(string)
+    allowed_origins = list(string)
+    expose_headers  = list(string)
+    max_age_seconds = number
+  }))
+  default = []
+}
+
 variable "force_destroy" {
   description = "Whether Terraform may delete non-empty buckets."
   type        = bool

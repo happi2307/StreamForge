@@ -37,6 +37,14 @@ locals {
 
   bucket_names = merge(local.default_bucket_names, var.bucket_name_overrides)
 
+  dashboard_static_bucket_name = format(
+    "%s-%s-dashboard-%s-%s",
+    var.project_name,
+    var.environment,
+    data.aws_caller_identity.current.account_id,
+    data.aws_region.current.name,
+  )
+
   default_current_version_expiration_days = {
     raw            = null
     clean          = null
@@ -72,7 +80,51 @@ module "kms" {
   source      = "../../modules/kms"
   alias_name  = var.kms_alias_name
   description = var.kms_description
-  tags        = merge(local.common_tags, { Name = var.kms_alias_name })
+  service_key_access = [
+    {
+      sid         = "AllowSnsUse"
+      principals  = ["sns.amazonaws.com"]
+      via_service = "sns.${data.aws_region.current.name}.amazonaws.com"
+    },
+    {
+      sid         = "AllowSqsUse"
+      principals  = ["sqs.amazonaws.com"]
+      via_service = "sqs.${data.aws_region.current.name}.amazonaws.com"
+    },
+  ]
+  direct_service_key_access = [
+    {
+      sid        = "AllowCloudWatchAlarmPublishing"
+      principals = ["cloudwatch.amazonaws.com"]
+    },
+    {
+      sid        = "AllowEventBridgePublishing"
+      principals = ["events.amazonaws.com"]
+    },
+    {
+      sid        = "AllowCloudFrontDashboardRead"
+      principals = ["cloudfront.amazonaws.com"]
+    },
+  ]
+  cloudwatch_logs_encryption_context_arns = [
+    "arn:aws:logs:${data.aws_region.current.name}:${data.aws_caller_identity.current.account_id}:log-group:/aws/lambda/${var.lambda_function_name}",
+    "arn:aws:logs:${data.aws_region.current.name}:${data.aws_caller_identity.current.account_id}:log-group:/aws/lambda/${var.dashboard_lambda_function_name}",
+  ]
+  tags = merge(local.common_tags, { Name = var.kms_alias_name })
+}
+
+module "web_static" {
+  source = "../../modules/web_static"
+
+  project_name           = var.project_name
+  environment            = var.environment
+  bucket_name            = local.dashboard_static_bucket_name
+  kms_key_arn            = module.kms.key_arn
+  asset_source_directory = abspath("${path.module}/../../../web")
+  api_endpoint           = module.web_console.api_endpoint
+  cognito_domain         = module.web_console.cognito_domain
+  cognito_client_id      = module.web_console.user_pool_client_id
+  tags                   = merge(local.common_tags, { Service = "dashboard-static" })
 }
 
 module "buckets" {
@@ -83,6 +135,13 @@ module "buckets" {
   kms_key_arn                        = module.kms.key_arn
   current_version_expiration_days    = local.current_version_expiration_days[each.key]
   noncurrent_version_expiration_days = local.noncurrent_version_expiration_days[each.key]
+  cors_rules = each.key == "raw" ? [{
+    allowed_headers = ["Content-Type"]
+    allowed_methods = ["PUT"]
+    allowed_origins = concat(var.dashboard_allowed_origins, [module.web_static.dashboard_origin])
+    expose_headers  = ["ETag"]
+    max_age_seconds = 300
+  }] : []
   tags = merge(local.common_tags, {
     Name    = each.value
     Service = each.key
@@ -92,32 +151,38 @@ module "buckets" {
 module "phase1_runtime" {
   source = "../../modules/phase1_runtime"
 
-  project_name              = var.project_name
-  environment               = var.environment
-  lambda_function_name      = var.lambda_function_name
-  lambda_description        = var.lambda_description
-  lambda_role_name          = var.lambda_role_name
-  lambda_inline_policy_name = var.lambda_inline_policy_name
-  event_rule_name           = var.event_rule_name
-  event_rule_description    = var.event_rule_description
-  event_target_id           = var.event_target_id
-  lambda_package_path       = var.lambda_package_path
-  lambda_handler            = var.lambda_handler
-  lambda_runtime            = var.lambda_runtime
-  lambda_timeout            = var.lambda_timeout
-  lambda_memory_size        = var.lambda_memory_size
-  raw_bucket_name           = module.buckets["raw"].bucket_name
-  raw_bucket_arn            = module.buckets["raw"].bucket_arn
-  raw_bucket_id             = module.buckets["raw"].bucket_id
-  clean_bucket_name         = module.buckets["clean"].bucket_name
-  clean_bucket_arn          = module.buckets["clean"].bucket_arn
-  rejected_bucket_name      = module.buckets["rejected"].bucket_name
-  rejected_bucket_arn       = module.buckets["rejected"].bucket_arn
-  metadata_bucket_name      = module.buckets["metadata"].bucket_name
-  metadata_bucket_arn       = module.buckets["metadata"].bucket_arn
-  metadata_prefix           = var.metadata_prefix
-  phase1_pipeline_version   = var.phase1_pipeline_version
-  kms_key_arn               = module.kms.key_arn
+  depends_on = [module.phase4_operations]
+
+  project_name                             = var.project_name
+  environment                              = var.environment
+  lambda_function_name                     = var.lambda_function_name
+  lambda_description                       = var.lambda_description
+  lambda_role_name                         = var.lambda_role_name
+  lambda_inline_policy_name                = var.lambda_inline_policy_name
+  event_rule_name                          = var.event_rule_name
+  event_rule_description                   = var.event_rule_description
+  event_target_id                          = var.event_target_id
+  lambda_package_path                      = var.lambda_package_path
+  lambda_handler                           = var.lambda_handler
+  lambda_runtime                           = var.lambda_runtime
+  lambda_timeout                           = var.lambda_timeout
+  lambda_memory_size                       = var.lambda_memory_size
+  lambda_log_retention_days                = var.lambda_log_retention_days
+  eventbridge_dead_letter_queue_arn        = module.phase4_operations.eventbridge_dead_letter_queue_arn
+  eventbridge_maximum_event_age_in_seconds = var.eventbridge_maximum_event_age_in_seconds
+  eventbridge_maximum_retry_attempts       = var.eventbridge_maximum_retry_attempts
+  raw_bucket_name                          = module.buckets["raw"].bucket_name
+  raw_bucket_arn                           = module.buckets["raw"].bucket_arn
+  raw_bucket_id                            = module.buckets["raw"].bucket_id
+  clean_bucket_name                        = module.buckets["clean"].bucket_name
+  clean_bucket_arn                         = module.buckets["clean"].bucket_arn
+  rejected_bucket_name                     = module.buckets["rejected"].bucket_name
+  rejected_bucket_arn                      = module.buckets["rejected"].bucket_arn
+  metadata_bucket_name                     = module.buckets["metadata"].bucket_name
+  metadata_bucket_arn                      = module.buckets["metadata"].bucket_arn
+  metadata_prefix                          = var.metadata_prefix
+  phase1_pipeline_version                  = var.phase1_pipeline_version
+  kms_key_arn                              = module.kms.key_arn
   tags = merge(local.common_tags, {
     Name    = var.lambda_function_name
     Service = "phase1-runtime"
@@ -178,5 +243,49 @@ module "phase3_curated" {
   curated_prefix               = var.phase3_curated_prefix
   pipeline_version             = var.phase3_pipeline_version
   max_invalid_percent          = var.phase3_max_invalid_percent
+  pipeline_metric_namespace    = var.pipeline_metric_namespace
   tags                         = local.common_tags
+}
+
+module "phase4_operations" {
+  source = "../../modules/phase4_operations"
+
+  name_prefix                               = "${var.project_name}-${var.environment}"
+  environment                               = var.environment
+  kms_key_arn                               = module.kms.key_arn
+  alert_topic_name                          = var.operations_alert_topic_name
+  alert_topic_display_name                  = var.operations_alert_topic_display_name
+  alert_email                               = var.operations_alert_email
+  eventbridge_dlq_name                      = var.eventbridge_dlq_name
+  eventbridge_dlq_message_retention_seconds = var.eventbridge_dlq_message_retention_seconds
+  event_rule_name                           = var.event_rule_name
+  lambda_function_name                      = var.lambda_function_name
+  glue_job_name                             = var.phase3_glue_job_name
+  phase2_athena_workgroup_name              = var.athena_workgroup_name
+  phase3_athena_workgroup_name              = var.phase3_athena_workgroup_name
+  pipeline_metric_namespace                 = var.pipeline_metric_namespace
+  max_invalid_percent                       = tonumber(var.phase3_max_invalid_percent)
+  alarm_period_seconds                      = var.operations_alarm_period_seconds
+  tags = merge(local.common_tags, {
+    Service = "phase4-operations"
+  })
+}
+
+module "web_console" {
+  source = "../../modules/web_console"
+
+  project_name         = var.project_name
+  environment          = var.environment
+  lambda_function_name = var.dashboard_lambda_function_name
+  lambda_package_path  = var.dashboard_lambda_package_path
+  raw_bucket_name      = module.buckets["raw"].bucket_name
+  raw_bucket_arn       = module.buckets["raw"].bucket_arn
+  metadata_bucket_name = module.buckets["metadata"].bucket_name
+  metadata_bucket_arn  = module.buckets["metadata"].bucket_arn
+  clean_bucket_arn     = module.buckets["clean"].bucket_arn
+  rejected_bucket_arn  = module.buckets["rejected"].bucket_arn
+  metadata_prefix      = var.metadata_prefix
+  kms_key_arn          = module.kms.key_arn
+  allowed_origins      = concat(var.dashboard_allowed_origins, [module.web_static.dashboard_origin])
+  tags                 = merge(local.common_tags, { Service = "web-console" })
 }

@@ -64,6 +64,20 @@ data "aws_iam_policy_document" "job_data_access" {
       var.kms_key_arn,
     ]
   }
+
+  statement {
+    effect = "Allow"
+    actions = [
+      "cloudwatch:PutMetricData",
+    ]
+    resources = ["*"]
+
+    condition {
+      test     = "StringEquals"
+      variable = "cloudwatch:namespace"
+      values   = [var.pipeline_metric_namespace]
+    }
+  }
 }
 
 resource "aws_iam_role" "job" {
@@ -86,14 +100,36 @@ resource "aws_iam_role_policy" "job_data_access" {
   policy = data.aws_iam_policy_document.job_data_access.json
 }
 
+resource "aws_glue_security_configuration" "this" {
+  name = "${var.glue_job_name}-security"
+
+  encryption_configuration {
+    cloudwatch_encryption {
+      cloudwatch_encryption_mode = "SSE-KMS"
+      kms_key_arn                = var.kms_key_arn
+    }
+
+    job_bookmarks_encryption {
+      job_bookmarks_encryption_mode = "CSE-KMS"
+      kms_key_arn                   = var.kms_key_arn
+    }
+
+    s3_encryption {
+      s3_encryption_mode = "SSE-KMS"
+      kms_key_arn        = var.kms_key_arn
+    }
+  }
+}
+
 resource "aws_glue_job" "this" {
-  name              = var.glue_job_name
-  description       = var.glue_job_description
-  role_arn          = aws_iam_role.job.arn
-  glue_version      = var.glue_job_glue_version
-  timeout           = var.glue_job_timeout
-  worker_type       = var.glue_job_worker_type
-  number_of_workers = var.glue_job_number_of_workers
+  name                   = var.glue_job_name
+  description            = var.glue_job_description
+  role_arn               = aws_iam_role.job.arn
+  glue_version           = var.glue_job_glue_version
+  timeout                = var.glue_job_timeout
+  worker_type            = var.glue_job_worker_type
+  number_of_workers      = var.glue_job_number_of_workers
+  security_configuration = aws_glue_security_configuration.this.name
 
   execution_property {
     max_concurrent_runs = var.glue_job_max_concurrent_runs
@@ -115,11 +151,13 @@ resource "aws_glue_job" "this" {
     "--CURATED_PREFIX"                   = var.curated_prefix
     "--QUARANTINE_BUCKET"                = var.quarantine_bucket_name
     "--DATABASE_NAME"                    = var.glue_database_name
+    "--ENVIRONMENT"                      = var.environment
     "--enable-continuous-cloudwatch-log" = "true"
     "--METADATA_BUCKET"                  = var.metadata_bucket_name
     "--INPUT_BUCKET"                     = var.clean_bucket_name
     "--job-language"                     = "python"
     "--METADATA_PREFIX"                  = var.metadata_prefix
+    "--METRICS_NAMESPACE"                = var.pipeline_metric_namespace
   }
 
   tags = merge(var.tags, {

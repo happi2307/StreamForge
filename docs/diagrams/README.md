@@ -1,9 +1,6 @@
 # Diagrams
 
-Phase 4 will add:
+Phase 4 diagrams:
 
-- infrastructure diagram
-- CI/CD flow
-- monitoring flow
-- security architecture
-- Terraform module diagram
+- [Monitoring flow](monitoring-flow.md)
+- [CI/CD and promotion flow](cicd-flow.md)

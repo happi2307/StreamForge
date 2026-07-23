@@ -1,0 +1,9 @@
+owner       = "your-name"
+cost_center = "portfolio"
+
+owner       = "your-name"
+cost_center = "production"
+
+# The default names create a new production stack. Supply explicit overrides
+# only when adopting pre-existing production resources.
+operations_alert_email = "alerts@example.com"

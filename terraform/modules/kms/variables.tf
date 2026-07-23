@@ -32,6 +32,31 @@ variable "enable_key_rotation" {
   default     = true
 }
 
+variable "service_key_access" {
+  description = "AWS service principals allowed to use the key through a regional AWS service endpoint."
+  type = list(object({
+    sid         = string
+    principals  = list(string)
+    via_service = string
+  }))
+  default = []
+}
+
+variable "direct_service_key_access" {
+  description = "AWS service principals that require direct KMS access, such as EventBridge publishing to an encrypted SNS topic."
+  type = list(object({
+    sid        = string
+    principals = list(string)
+  }))
+  default = []
+}
+
+variable "cloudwatch_logs_encryption_context_arns" {
+  description = "CloudWatch log group ARNs permitted to use the key through the CloudWatch Logs encryption context."
+  type        = list(string)
+  default     = []
+}
+
 variable "tags" {
   description = "Tags applied to the KMS key."
   type        = map(string)

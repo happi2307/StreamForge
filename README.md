@@ -26,6 +26,8 @@ See [the architecture document](docs/architecture.md) for more detail.
 - AWS Glue Crawler
 - Amazon Athena
 - AWS Key Management Service (KMS)
+- Amazon CloudFront
+- Amazon Cognito
 - Terraform
 
 ## Phase 4 foundation
@@ -40,11 +42,40 @@ Track A introduces the initial Terraform adoption layout:
 - `terraform/modules/phase2_analytics`
 - `terraform/modules/phase3_curated`
 
-The current Track A implementation focuses on backend bootstrap, KMS/S3
-adoption, the Phase 1 IAM/Lambda/EventBridge runtime layer, and the Phase 2
-Glue/Athena analytics layer, plus the Phase 3 curated Glue/Athena layer. See
-the import guide in
-`docs/terraform-import-guide.md`.
+Track A adopts the deployed KMS/S3, Phase 1 runtime, Phase 2 analytics, and
+Phase 3 curated layers. Track B adds encrypted operational alerting, an
+EventBridge dead-letter queue, CloudWatch alarms and dashboarding, and incident
+runbooks. See the [Terraform import guide](docs/terraform-import-guide.md) and
+[monitoring flow](docs/diagrams/monitoring-flow.md).
+
+Phase 4 also includes [CI/CD and promotion guidance](docs/github-environments.md),
+[disaster-recovery assumptions](docs/disaster-recovery.md), and a
+[definition of done](docs/definition-of-done.md).
+
+## Web dashboard
+
+The dashboard provides authenticated CSV upload, processing status, row-level
+counts, and expiring download links for clean and rejected output. In `dev` it
+is delivered over HTTPS through CloudFront from a private, versioned S3 bucket.
+CloudFront uses Origin Access Control; the bucket remains private and its
+objects are encrypted with the project KMS key.
+
+Retrieve the deployed dashboard URL with:
+
+```powershell
+terraform -chdir=terraform/environments/dev output -raw web_dashboard_url
+```
+
+For local UI work, serve the `web` directory at the configured localhost
+origin:
+
+```powershell
+python -m http.server 8000 --directory web
+```
+
+The CloudFront deployment generates its own non-secret `config.js` from
+[`web/config.template.js`](web/config.template.js), so the deployed callback
+URL always matches the distribution.
 
 ## Local setup
 

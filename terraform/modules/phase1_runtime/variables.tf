@@ -75,6 +75,41 @@ variable "lambda_memory_size" {
   default     = 256
 }
 
+variable "lambda_reserved_concurrent_executions" {
+  description = "Maximum concurrent Phase 1 Lambda executions; limits blast radius during upload spikes."
+  type        = number
+  default     = 5
+}
+
+variable "lambda_dead_letter_queue_message_retention_seconds" {
+  description = "How long asynchronous Lambda failures remain available for investigation."
+  type        = number
+  default     = 1209600
+}
+
+variable "lambda_log_retention_days" {
+  description = "Retention period for the Phase 1 Lambda CloudWatch log group."
+  type        = number
+  default     = 30
+}
+
+variable "eventbridge_dead_letter_queue_arn" {
+  description = "ARN of the SQS queue used when EventBridge cannot deliver a raw-upload event."
+  type        = string
+}
+
+variable "eventbridge_maximum_event_age_in_seconds" {
+  description = "Maximum age of a raw-upload event before EventBridge sends it to the dead-letter queue."
+  type        = number
+  default     = 3600
+}
+
+variable "eventbridge_maximum_retry_attempts" {
+  description = "Maximum delivery attempts before EventBridge sends a raw-upload event to the dead-letter queue."
+  type        = number
+  default     = 24
+}
+
 variable "raw_bucket_name" {
   description = "Name of the raw input bucket."
   type        = string

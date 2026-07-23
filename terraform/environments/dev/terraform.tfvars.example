@@ -41,3 +41,7 @@ phase3_glue_job_inline_policy_name = "streamforge-phase3-data-access"
 phase3_glue_job_name = "streamforge-transform-customers"
 phase3_athena_workgroup_name = "streamforge-phase3"
 phase3_curated_table_name = "customers_curated"
+
+# Track B creates the alerting subscription when this optional value is set.
+# The recipient must confirm the subscription email after Terraform applies.
+operations_alert_email = "you@example.com"

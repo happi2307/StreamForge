@@ -122,6 +122,24 @@ variable "lambda_memory_size" {
   default     = 512
 }
 
+variable "lambda_log_retention_days" {
+  description = "Retention period for the Phase 1 Lambda CloudWatch log group."
+  type        = number
+  default     = 30
+}
+
+variable "eventbridge_maximum_event_age_in_seconds" {
+  description = "Maximum event age before a failed delivery moves to the dead-letter queue."
+  type        = number
+  default     = 3600
+}
+
+variable "eventbridge_maximum_retry_attempts" {
+  description = "Maximum EventBridge retry attempts before delivery moves to the dead-letter queue."
+  type        = number
+  default     = 24
+}
+
 variable "metadata_prefix" {
   description = "Prefix used for Phase 1 processing manifests."
   type        = string
@@ -276,6 +294,67 @@ variable "phase3_max_invalid_percent" {
   description = "Maximum invalid-row percentage threshold passed to the Phase 3 Glue job."
   type        = string
   default     = "10"
+}
+
+variable "pipeline_metric_namespace" {
+  description = "CloudWatch namespace used by the Phase 3 Glue job for quality metrics."
+  type        = string
+  default     = "StreamForge/Pipeline"
+}
+
+variable "operations_alert_topic_name" {
+  description = "Name of the KMS-encrypted SNS topic for operational alerts."
+  type        = string
+  default     = "streamforge-dev-alerts"
+}
+
+variable "operations_alert_topic_display_name" {
+  description = "Display name used in operational alert notifications."
+  type        = string
+  default     = "StreamForge Dev Alerts"
+}
+
+variable "operations_alert_email" {
+  description = "Optional email recipient for operational alerts. AWS requires the recipient to confirm the subscription."
+  type        = string
+  default     = null
+  nullable    = true
+}
+
+variable "eventbridge_dlq_name" {
+  description = "Name of the KMS-encrypted SQS DLQ for failed raw-upload deliveries."
+  type        = string
+  default     = "streamforge-dev-eventbridge-dlq"
+}
+
+variable "eventbridge_dlq_message_retention_seconds" {
+  description = "Retention period for undeliverable raw-upload events."
+  type        = number
+  default     = 1209600
+}
+
+variable "operations_alarm_period_seconds" {
+  description = "CloudWatch alarm evaluation period in seconds."
+  type        = number
+  default     = 300
+}
+
+variable "dashboard_lambda_function_name" {
+  description = "Name of the Lambda function serving the authenticated dashboard API."
+  type        = string
+  default     = "streamforge-dashboard-api"
+}
+
+variable "dashboard_lambda_package_path" {
+  description = "Path to the dashboard API deployment ZIP."
+  type        = string
+  default     = "dashboard-api.zip"
+}
+
+variable "dashboard_allowed_origins" {
+  description = "Allowed browser origins for the dashboard API, Cognito callbacks, and raw-bucket upload CORS."
+  type        = list(string)
+  default     = ["http://localhost:8000"]
 }
 
 variable "bucket_name_overrides" {

@@ -125,7 +125,7 @@ variable "lambda_memory_size" {
 variable "lambda_log_retention_days" {
   description = "Retention period for the Phase 1 Lambda CloudWatch log group."
   type        = number
-  default     = 30
+  default     = 365
 }
 
 variable "eventbridge_maximum_event_age_in_seconds" {

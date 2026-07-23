@@ -4,9 +4,6 @@ data "aws_partition" "current" {}
 
 data "aws_region" "current" {}
 
-#checkov:skip=CKV_AWS_109: A KMS key policy must use Resource "*" for the key it governs; access is restricted by its principal and deployed IAM policies.
-#checkov:skip=CKV_AWS_111: KMS key policies require Resource "*" and cannot scope kms:* to a key ARN within that policy document.
-#checkov:skip=CKV_AWS_356: KMS requires Resource "*" in this key policy; the account-root principal delegates access only through scoped IAM policies.
 data "aws_iam_policy_document" "key_policy" {
   policy_id = var.policy_id
 
@@ -109,6 +106,9 @@ data "aws_iam_policy_document" "key_policy" {
 }
 
 resource "aws_kms_key" "this" {
+  #checkov:skip=CKV_AWS_109: A KMS key policy must use Resource "*" for the key it governs; access is constrained by principals and scoped IAM policies.
+  #checkov:skip=CKV_AWS_111: KMS key policies require Resource "*" and cannot scope kms:* to this key ARN within the policy document.
+  #checkov:skip=CKV_AWS_356: KMS requires Resource "*" in its key policy; the account-root principal delegates use only through scoped IAM policies.
   description             = var.description
   deletion_window_in_days = var.deletion_window_in_days
   enable_key_rotation     = var.enable_key_rotation

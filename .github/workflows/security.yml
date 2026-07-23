@@ -30,7 +30,9 @@ jobs:
       - uses: aquasecurity/trivy-action@v0.36.0
         with:
           scan-type: fs
-          scanners: vuln,secret,misconfig
+          # Checkov is the dedicated Terraform policy gate below. Trivy remains
+          # responsible for dependency vulnerabilities and committed secrets.
+          scanners: vuln,secret
           severity: HIGH,CRITICAL
           exit-code: "1"
 

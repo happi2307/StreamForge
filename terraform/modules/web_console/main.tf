@@ -63,15 +63,15 @@ resource "aws_iam_role_policy" "storage_access" {
 
 resource "aws_cloudwatch_log_group" "lambda" {
   name              = "/aws/lambda/${var.lambda_function_name}"
-  retention_in_days = 30
+  retention_in_days = 365
   kms_key_id        = var.kms_key_arn
   tags              = var.tags
 }
 
-#checkov:skip=CKV_AWS_116: API Gateway invokes this function synchronously; there is no asynchronous payload for a Lambda DLQ to retain.
-#checkov:skip=CKV_AWS_117: The API only accesses managed AWS services and does not need private network resources.
-#checkov:skip=CKV_AWS_272: Code signing is deferred until CI signs release artifacts; CI builds packages from tracked source and the deployment role is restricted.
 resource "aws_lambda_function" "api" {
+  #checkov:skip=CKV_AWS_116: API Gateway invokes this function synchronously; there is no asynchronous payload for a Lambda DLQ to retain.
+  #checkov:skip=CKV_AWS_117: The API only accesses managed AWS services and does not need private network resources.
+  #checkov:skip=CKV_AWS_272: Code signing is deferred until CI signs release artifacts; CI builds packages from tracked source and the deployment role is restricted.
   function_name                  = var.lambda_function_name
   role                           = aws_iam_role.lambda.arn
   runtime                        = "python3.12"

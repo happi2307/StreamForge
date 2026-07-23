@@ -90,7 +90,7 @@ variable "lambda_dead_letter_queue_message_retention_seconds" {
 variable "lambda_log_retention_days" {
   description = "Retention period for the Phase 1 Lambda CloudWatch log group."
   type        = number
-  default     = 30
+  default     = 365
 }
 
 variable "eventbridge_dead_letter_queue_arn" {

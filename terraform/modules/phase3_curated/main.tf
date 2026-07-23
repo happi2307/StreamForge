@@ -122,6 +122,7 @@ resource "aws_glue_security_configuration" "this" {
 }
 
 resource "aws_glue_job" "this" {
+  #checkov:skip=CKV_AWS_195: The job explicitly references aws_glue_security_configuration.this; this static check does not resolve the Terraform reference.
   name                   = var.glue_job_name
   description            = var.glue_job_description
   role_arn               = aws_iam_role.job.arn

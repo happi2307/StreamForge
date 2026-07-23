@@ -131,9 +131,9 @@ resource "aws_sqs_queue_policy" "lambda_async_dlq" {
   policy    = data.aws_iam_policy_document.lambda_async_dlq.json
 }
 
-#checkov:skip=CKV_AWS_117: This ingestion Lambda accesses only managed AWS services; a VPC would add NAT/endpoints without reducing data-plane exposure.
-#checkov:skip=CKV_AWS_272: Code signing is deferred until CI signs release artifacts; CI builds packages from tracked source and the deployment role is restricted.
 resource "aws_lambda_function" "this" {
+  #checkov:skip=CKV_AWS_117: This ingestion Lambda accesses only managed AWS services; a VPC would add NAT/endpoints without reducing data-plane exposure.
+  #checkov:skip=CKV_AWS_272: Code signing is deferred until CI signs release artifacts; CI builds packages from tracked source and the deployment role is restricted.
   function_name                  = var.lambda_function_name
   description                    = var.lambda_description
   role                           = aws_iam_role.lambda.arn

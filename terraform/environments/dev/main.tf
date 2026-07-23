@@ -2,6 +2,10 @@ data "aws_caller_identity" "current" {}
 
 data "aws_region" "current" {}
 
+data "aws_kms_alias" "terraform_state" {
+  name = var.terraform_state_kms_alias
+}
+
 locals {
   common_tags = {
     Project     = var.project_name
@@ -51,6 +55,18 @@ locals {
     var.environment,
     data.aws_caller_identity.current.account_id,
     data.aws_region.current.name,
+  )
+
+  terraform_state_bucket_name = format(
+    "%s-shared-tfstate-%s-%s",
+    var.project_name,
+    data.aws_caller_identity.current.account_id,
+    data.aws_region.current.name,
+  )
+
+  terraform_lock_table_name = format(
+    "%s-shared-terraform-locks",
+    var.project_name,
   )
 
   default_current_version_expiration_days = {
@@ -311,4 +327,33 @@ module "web_console" {
   kms_key_arn          = module.kms.key_arn
   allowed_origins      = concat(var.dashboard_allowed_origins, [module.web_static.dashboard_origin])
   tags                 = merge(local.common_tags, { Service = "web-console" })
+}
+
+module "github_actions_oidc" {
+  source = "../../modules/github_actions_oidc"
+
+  project_name        = var.project_name
+  environment         = var.environment
+  github_repository   = var.github_repository
+  github_environment  = var.github_environment
+  role_name           = var.github_actions_role_name
+  state_bucket_name   = local.terraform_state_bucket_name
+  state_kms_key_arn   = data.aws_kms_alias.terraform_state.target_key_arn
+  lock_table_arn      = "arn:aws:dynamodb:${data.aws_region.current.name}:${data.aws_caller_identity.current.account_id}:table/${local.terraform_lock_table_name}"
+  project_kms_key_arn = module.kms.key_arn
+  project_bucket_arns = concat(
+    [for bucket in module.buckets : bucket.bucket_arn],
+    [
+      "arn:aws:s3:::${module.s3_access_logs.bucket_name}",
+      "arn:aws:s3:::${module.web_static.bucket_name}",
+      "arn:aws:s3:::${module.web_static.access_log_bucket_name}",
+    ],
+  )
+  worker_role_names = [
+    var.lambda_role_name,
+    var.dashboard_lambda_function_name == "" ? "" : "${var.dashboard_lambda_function_name}-role",
+    var.glue_crawler_role_name,
+    var.phase3_glue_job_role_name,
+  ]
+  tags = merge(local.common_tags, { Service = "github-actions-oidc" })
 }

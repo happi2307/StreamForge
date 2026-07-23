@@ -39,6 +39,12 @@ data "aws_iam_policy_document" "lambda_data_plane" {
   }
 
   statement {
+    effect    = "Allow"
+    actions   = ["sqs:SendMessage"]
+    resources = [aws_sqs_queue.lambda_async_dlq.arn]
+  }
+
+  statement {
     effect = "Allow"
     actions = [
       "kms:Decrypt",
@@ -121,7 +127,7 @@ data "aws_iam_policy_document" "lambda_async_dlq" {
     condition {
       test     = "ArnEquals"
       variable = "aws:SourceArn"
-      values   = [aws_lambda_function.this.arn]
+      values   = ["arn:aws:lambda:${data.aws_region.current.name}:${data.aws_caller_identity.current.account_id}:function:${var.lambda_function_name}"]
     }
   }
 }

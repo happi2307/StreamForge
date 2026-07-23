@@ -92,3 +92,13 @@ output "web_console_user_pool_client_id" { value = module.web_console.user_pool_
 output "web_console_cognito_domain" { value = module.web_console.cognito_domain }
 output "web_dashboard_url" { value = module.web_static.dashboard_origin }
 output "web_dashboard_bucket_name" { value = module.web_static.bucket_name }
+
+output "github_actions_deployment_role_arn" {
+  description = "Set this value as AWS_ROLE_TO_ASSUME in the GitHub dev environment."
+  value       = module.github_actions_oidc.deployment_role_arn
+}
+
+output "github_actions_oidc_provider_arn" {
+  description = "GitHub Actions OIDC provider ARN for the development AWS account."
+  value       = module.github_actions_oidc.oidc_provider_arn
+}

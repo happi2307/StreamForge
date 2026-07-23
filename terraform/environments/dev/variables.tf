@@ -38,6 +38,30 @@ variable "repository" {
   default     = "StreamForge"
 }
 
+variable "github_repository" {
+  description = "GitHub repository in owner/name form trusted by the dev deployment role."
+  type        = string
+  default     = "happi2307/StreamForge"
+}
+
+variable "github_environment" {
+  description = "GitHub protected environment required by the dev deployment role."
+  type        = string
+  default     = "dev"
+}
+
+variable "github_actions_role_name" {
+  description = "IAM role name assumed by GitHub Actions for dev Terraform workflows."
+  type        = string
+  default     = "streamforge-dev-github-actions"
+}
+
+variable "terraform_state_kms_alias" {
+  description = "KMS alias used by the shared Terraform remote-state bucket."
+  type        = string
+  default     = "alias/streamforge-shared-tfstate"
+}
+
 variable "kms_alias_name" {
   description = "Alias for the environment KMS key."
   type        = string

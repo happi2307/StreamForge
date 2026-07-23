@@ -1,0 +1,43 @@
+name: Terraform plan
+
+on:
+  pull_request:
+    paths:
+      - terraform/**
+      - lambda/**
+      - web/**
+      - dashboard_api.py
+      - scripts/package_lambdas.py
+      - .github/workflows/terraform-plan.yml
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  id-token: write
+
+jobs:
+  plan-dev:
+    name: Dev plan
+    if: vars.AWS_ROLE_TO_ASSUME != ''
+    environment: dev
+    runs-on: ubuntu-24.04
+    defaults:
+      run:
+        working-directory: terraform/environments/dev
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+      - run: python scripts/package_lambdas.py --environment dev --include-dashboard
+        working-directory: .
+      - uses: hashicorp/setup-terraform@v3
+        with:
+          terraform_version: 1.14.8
+      - uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ vars.AWS_ROLE_TO_ASSUME }}
+          aws-region: ${{ vars.AWS_REGION }}
+      - run: terraform init -reconfigure -backend-config="bucket=${{ vars.TF_STATE_BUCKET }}" -backend-config="key=${{ vars.TF_STATE_KEY }}" -backend-config="region=${{ vars.AWS_REGION }}" -backend-config="dynamodb_table=${{ vars.TF_LOCK_TABLE }}" -backend-config="encrypt=true"
+      - run: terraform plan -input=false -no-color

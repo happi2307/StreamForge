@@ -1,0 +1,53 @@
+name: CI
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+permissions:
+  contents: read
+
+jobs:
+  python:
+    name: Python tests
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+      - run: python -m pip install --upgrade pip==25.1.1
+      - run: python -m pip install -r requirements-dev.txt
+      - run: python -m pytest
+
+  terraform:
+    name: Terraform formatting and validation
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      - uses: hashicorp/setup-terraform@v3
+        with:
+          terraform_version: 1.14.8
+      - run: terraform fmt -check -recursive terraform
+      - run: terraform -chdir=terraform/bootstrap/backend init -backend=false
+      - run: terraform -chdir=terraform/bootstrap/backend validate
+      - run: terraform -chdir=terraform/environments/dev init -backend=false
+      - run: terraform -chdir=terraform/environments/dev validate
+      - run: terraform -chdir=terraform/environments/prod init -backend=false
+      - run: terraform -chdir=terraform/environments/prod validate
+
+  packages:
+    name: Lambda package validation
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+      - run: python scripts/package_lambdas.py --environment dev --include-dashboard
+      - run: python -m zipfile -t terraform/environments/dev/function.zip
+      - run: python -m zipfile -t terraform/environments/dev/dashboard-api.zip
+      - run: python -c "from pathlib import Path; size = Path('terraform/environments/dev/function.zip').stat().st_size; assert size <= 49 * 1024 * 1024, f'Phase 1 archive is {size} bytes; Lambda direct uploads must stay below 50 MiB'"

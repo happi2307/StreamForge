@@ -166,6 +166,13 @@ data "aws_iam_policy_document" "keys_and_iam" {
   }
 
   statement {
+    sid       = "ReadDeploymentPolicyConfiguration"
+    effect    = "Allow"
+    actions   = ["iam:GetPolicy", "iam:GetPolicyVersion"]
+    resources = ["arn:${data.aws_partition.current.partition}:iam::${data.aws_caller_identity.current.account_id}:policy/${var.role_name}-*"]
+  }
+
+  statement {
     sid    = "ManageWorkerIamRoles"
     effect = "Allow"
     actions = [
@@ -226,6 +233,7 @@ data "aws_iam_policy_document" "runtime_and_observability" {
       "lambda:ListAliases",
       "lambda:ListProvisionedConcurrencyConfigs",
       "lambda:ListTags",
+      "lambda:ListVersionsByFunction",
       "lambda:PutFunctionConcurrency",
       "lambda:PutFunctionCodeSigningConfig",
       "lambda:PutProvisionedConcurrencyConfig",

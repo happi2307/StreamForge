@@ -39,12 +39,15 @@ Track A introduces the initial Terraform adoption layout:
 - `terraform/modules/phase1_runtime`
 - `terraform/modules/phase2_analytics`
 - `terraform/modules/phase3_curated`
+- `terraform/modules/monitoring`
 
-The current Track A implementation focuses on backend bootstrap, KMS/S3
-adoption, the Phase 1 IAM/Lambda/EventBridge runtime layer, and the Phase 2
-Glue/Athena analytics layer, plus the Phase 3 curated Glue/Athena layer. See
-the import guide in
-`docs/terraform-import-guide.md`.
+The Track A implementation covers backend bootstrap, KMS/S3 adoption, the
+Phase 1 IAM/Lambda/EventBridge runtime layer, the Phase 2 Glue/Athena analytics
+layer, the Phase 3 curated Glue/Athena layer, and a monitoring layer (SNS
+alerts, CloudWatch Lambda alarms, and Glue job failure notifications). Both a
+`dev` and a `prod` environment root module consume these modules. Operational
+docs live under `docs/adr`, `docs/diagrams`, and `docs/runbooks`. See the import
+guide in `docs/terraform-import-guide.md`.
 
 ## Local setup
 

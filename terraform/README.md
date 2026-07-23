@@ -8,14 +8,16 @@ Track A adopts the existing AWS footprint into Terraform in a low-risk order:
 4. Glue + Athena
 5. monitoring and notifications
 
-The initial implementation in this repository focuses on:
+The implementation in this repository covers:
 
 - backend bootstrap scaffolding
 - reusable KMS and S3 modules
 - a reusable Phase 1 runtime module for IAM, Lambda, and EventBridge
 - a reusable Phase 2 analytics module for Glue and Athena
 - a reusable Phase 3 curated analytics module for Glue ETL and Athena
-- a `dev` environment root module
+- a reusable monitoring module for SNS alerts, CloudWatch alarms, and Glue
+  failure notifications
+- `dev` and `prod` environment root modules
 
 Use the `dev` environment first to import and reconcile the currently deployed
-resources before creating a `prod` stack.
+resources, then bring up the `prod` stack from the same modules.

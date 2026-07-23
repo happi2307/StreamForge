@@ -21,4 +21,5 @@ override.tf.json
 *_override.tf.json
 backend.hcl
 terraform.tfvars
+.claude
 

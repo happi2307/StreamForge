@@ -41,3 +41,9 @@ phase3_glue_job_inline_policy_name = "streamforge-phase3-data-access"
 phase3_glue_job_name = "streamforge-transform-customers"
 phase3_athena_workgroup_name = "streamforge-phase3"
 phase3_curated_table_name = "customers_curated"
+
+# Phase 4 monitoring and notifications. Set a real email to receive alerts;
+# the subscription must be confirmed from the email before it delivers.
+alerts_sns_topic_name = "streamforge-dev-alerts"
+alerts_notification_email = ""
+glue_failure_rule_name = "streamforge-glue-job-failed"

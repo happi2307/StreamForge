@@ -7,7 +7,7 @@ variable "project_name" {
 variable "environment" {
   description = "Environment label."
   type        = string
-  default     = "dev"
+  default     = "prod"
 }
 
 variable "aws_region" {
@@ -41,13 +41,13 @@ variable "repository" {
 variable "kms_alias_name" {
   description = "Alias for the environment KMS key."
   type        = string
-  default     = "alias/streamforge-dev"
+  default     = "alias/streamforge-prod"
 }
 
 variable "kms_description" {
   description = "Description for the environment KMS key."
   type        = string
-  default     = "KMS key for StreamForge dev data plane resources."
+  default     = "KMS key for StreamForge prod data plane resources."
 }
 
 variable "lambda_function_name" {
@@ -299,13 +299,13 @@ variable "bucket_noncurrent_version_expiration_days_overrides" {
 variable "alerts_sns_topic_name" {
   description = "Name of the SNS topic that receives operational alerts."
   type        = string
-  default     = "streamforge-dev-alerts"
+  default     = "streamforge-prod-alerts"
 }
 
 variable "alerts_sns_topic_display_name" {
   description = "Display name for the SNS alerts topic."
   type        = string
-  default     = "StreamForge Dev Alerts"
+  default     = "StreamForge Prod Alerts"
 }
 
 variable "alerts_notification_email" {

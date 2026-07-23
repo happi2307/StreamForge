@@ -1,0 +1,24 @@
+owner       = "your-name"
+cost_center = "portfolio"
+
+# The prod environment reuses the same modules as dev. Set overrides to match
+# the real prod resource names before importing an existing prod stack, or keep
+# the defaults when creating prod from scratch.
+bucket_name_overrides = {
+  raw            = "streamforge-raw-ACCOUNTID-us-east-1"
+  clean          = "streamforge-clean-ACCOUNTID-us-east-1"
+  rejected       = "streamforge-rejected-ACCOUNTID-us-east-1"
+  metadata       = "streamforge-metadata-ACCOUNTID-us-east-1"
+  curated        = "streamforge-curated-ACCOUNTID-us-east-1"
+  quarantine     = "streamforge-quarantine-ACCOUNTID-us-east-1"
+  athena_results = "streamforge-athena-results-ACCOUNTID-us-east-1"
+}
+
+kms_alias_name  = "alias/streamforge-prod"
+kms_description = "StreamForge prod S3 encryption key"
+
+# Phase 4 monitoring and notifications. Set a real email to receive alerts;
+# the subscription must be confirmed from the email before it delivers.
+alerts_sns_topic_name     = "streamforge-prod-alerts"
+alerts_notification_email = ""
+glue_failure_rule_name    = "streamforge-glue-job-failed"

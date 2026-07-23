@@ -127,3 +127,29 @@ terraform import module.phase3_curated.aws_glue_job.this streamforge-transform-c
 terraform import module.phase3_curated.aws_athena_workgroup.this streamforge-phase3
 terraform import module.phase3_curated.aws_glue_catalog_table.curated 108379846489:streamforge_clean_db:customers_curated
 ```
+
+## Phase 4 monitoring resources
+
+The `monitoring` module creates new resources (an SNS topic, three CloudWatch
+alarms, and a Glue-failure EventBridge rule) that did not exist in the pre-import
+footprint. Those are created by `terraform apply`, not imported. Set
+`alerts_notification_email` before applying and confirm the subscription from the
+email inbox; until it is confirmed, alerts are not delivered.
+
+If any of these already exist in the account, import them before applying:
+
+```powershell
+terraform import module.monitoring.aws_sns_topic.alerts arn:aws:sns:us-east-1:108379846489:streamforge-dev-alerts
+terraform import module.monitoring.aws_cloudwatch_metric_alarm.lambda_errors streamforge-processor-errors
+terraform import module.monitoring.aws_cloudwatch_metric_alarm.lambda_throttles streamforge-processor-throttles
+terraform import module.monitoring.aws_cloudwatch_metric_alarm.lambda_duration streamforge-processor-duration
+terraform import module.monitoring.aws_cloudwatch_event_rule.glue_job_failed streamforge-glue-job-failed
+```
+
+## prod environment
+
+`terraform/environments/prod` mirrors `dev` and reuses the same modules. Bring it
+up only after the `dev` adoption is stable. Use a separate state key
+(`prod/terraform.tfstate`) and preferably a separate AWS account. Repeat the
+import steps above against the prod resources, or run a clean `plan`/`apply` to
+create prod from scratch.

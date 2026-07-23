@@ -45,6 +45,14 @@ locals {
     data.aws_region.current.name,
   )
 
+  s3_access_logs_bucket_name = format(
+    "%s-%s-s3-access-logs-%s-%s",
+    var.project_name,
+    var.environment,
+    data.aws_caller_identity.current.account_id,
+    data.aws_region.current.name,
+  )
+
   default_current_version_expiration_days = {
     raw            = null
     clean          = null
@@ -125,11 +133,19 @@ module "web_static" {
   environment            = var.environment
   bucket_name            = local.dashboard_static_bucket_name
   kms_key_arn            = module.kms.key_arn
+  access_log_bucket_name = module.s3_access_logs.bucket_name
   asset_source_directory = abspath("${path.module}/../../../web")
   api_endpoint           = module.web_console.api_endpoint
   cognito_domain         = module.web_console.cognito_domain
   cognito_client_id      = module.web_console.user_pool_client_id
   tags                   = merge(local.common_tags, { Service = "dashboard-static" })
+}
+
+module "s3_access_logs" {
+  source = "../../modules/s3_access_logs"
+
+  bucket_name = local.s3_access_logs_bucket_name
+  tags        = merge(local.common_tags, { Service = "s3-access-logs" })
 }
 
 module "buckets" {
@@ -138,6 +154,7 @@ module "buckets" {
 
   bucket_name                        = each.value
   kms_key_arn                        = module.kms.key_arn
+  access_log_bucket_name             = module.s3_access_logs.bucket_name
   current_version_expiration_days    = local.current_version_expiration_days[each.key]
   noncurrent_version_expiration_days = local.noncurrent_version_expiration_days[each.key]
   cors_rules = each.key == "raw" ? [{

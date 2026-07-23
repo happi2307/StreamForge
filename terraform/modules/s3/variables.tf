@@ -14,6 +14,11 @@ variable "tags" {
   default     = {}
 }
 
+variable "access_log_bucket_name" {
+  description = "Name of the central S3 bucket that receives server access logs."
+  type        = string
+}
+
 variable "cors_rules" {
   description = "Optional browser CORS rules for this bucket."
   type = list(object({

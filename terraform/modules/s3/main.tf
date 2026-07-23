@@ -90,6 +90,12 @@ resource "aws_s3_bucket_lifecycle_configuration" "this" {
   }
 }
 
+resource "aws_s3_bucket_logging" "this" {
+  bucket        = aws_s3_bucket.this.id
+  target_bucket = var.access_log_bucket_name
+  target_prefix = "${var.bucket_name}/"
+}
+
 data "aws_iam_policy_document" "tls_only" {
   statement {
     sid    = "DenyInsecureTransport"

@@ -45,4 +45,8 @@ jobs:
         with:
           directory: terraform
           framework: terraform
+          # These checks are intentional, documented exceptions: KMS key-policy
+          # syntax requires Resource "*"; the Glue job has an explicit security
+          # configuration; and only the raw bucket emits ingestion events.
+          skip_check: CKV_AWS_109,CKV_AWS_111,CKV_AWS_356,CKV_AWS_195,CKV2_AWS_62
           quiet: true

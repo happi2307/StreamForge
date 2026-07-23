@@ -99,6 +99,7 @@ resource "aws_s3_bucket_lifecycle_configuration" "access_logs" {
 
     filter {}
 
+    abort_incomplete_multipart_upload { days_after_initiation = 7 }
     expiration { days = 90 }
 
     noncurrent_version_expiration { noncurrent_days = 30 }
@@ -154,6 +155,18 @@ data "aws_iam_policy_document" "access_logs" {
 resource "aws_s3_bucket_policy" "access_logs" {
   bucket = aws_s3_bucket.access_logs.id
   policy = data.aws_iam_policy_document.access_logs.json
+}
+
+resource "aws_s3_bucket_logging" "this" {
+  bucket        = aws_s3_bucket.this.id
+  target_bucket = var.access_log_bucket_name
+  target_prefix = "dashboard-static/"
+}
+
+resource "aws_s3_bucket_logging" "access_logs" {
+  bucket        = aws_s3_bucket.access_logs.id
+  target_bucket = var.access_log_bucket_name
+  target_prefix = "dashboard-cloudfront-logs/"
 }
 
 resource "aws_cloudfront_origin_access_control" "this" {

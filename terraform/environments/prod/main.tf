@@ -37,6 +37,14 @@ locals {
 
   bucket_names = merge(local.default_bucket_names, var.bucket_name_overrides)
 
+  s3_access_logs_bucket_name = format(
+    "%s-%s-s3-access-logs-%s-%s",
+    var.project_name,
+    var.environment,
+    data.aws_caller_identity.current.account_id,
+    data.aws_region.current.name,
+  )
+
   default_current_version_expiration_days = {
     raw            = null
     clean          = null
@@ -106,6 +114,7 @@ module "buckets" {
 
   bucket_name                        = each.value
   kms_key_arn                        = module.kms.key_arn
+  access_log_bucket_name             = module.s3_access_logs.bucket_name
   current_version_expiration_days    = local.current_version_expiration_days[each.key]
   noncurrent_version_expiration_days = local.noncurrent_version_expiration_days[each.key]
   tags = merge(local.common_tags, {
@@ -211,6 +220,13 @@ module "phase3_curated" {
   max_invalid_percent          = var.phase3_max_invalid_percent
   pipeline_metric_namespace    = var.pipeline_metric_namespace
   tags                         = local.common_tags
+}
+
+module "s3_access_logs" {
+  source = "../../modules/s3_access_logs"
+
+  bucket_name = local.s3_access_logs_bucket_name
+  tags        = merge(local.common_tags, { Service = "s3-access-logs" })
 }
 
 module "phase4_operations" {

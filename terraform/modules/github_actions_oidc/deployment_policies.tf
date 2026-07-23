@@ -56,6 +56,7 @@ data "aws_iam_policy_document" "state_and_storage" {
       "s3:GetBucketPolicy",
       "s3:GetBucketPolicyStatus",
       "s3:GetBucketPublicAccessBlock",
+      "s3:GetBucketRequestPayment",
       "s3:GetBucketTagging",
       "s3:GetBucketVersioning",
       "s3:GetBucketWebsite",
@@ -242,7 +243,6 @@ data "aws_iam_policy_document" "runtime_and_observability" {
       "logs:AssociateKmsKey",
       "logs:CreateLogGroup",
       "logs:DeleteLogGroup",
-      "logs:DescribeLogGroups",
       "logs:ListTagsForResource",
       "logs:PutRetentionPolicy",
       "logs:TagResource",
@@ -253,6 +253,13 @@ data "aws_iam_policy_document" "runtime_and_observability" {
       "arn:${data.aws_partition.current.partition}:logs:${data.aws_region.current.name}:${data.aws_caller_identity.current.account_id}:log-group:/aws/apigateway/streamforge-*",
       "arn:${data.aws_partition.current.partition}:logs:${data.aws_region.current.name}:${data.aws_caller_identity.current.account_id}:log-group:aws-waf-logs-streamforge-*",
     ]
+  }
+
+  statement {
+    sid       = "ReadLogGroupConfiguration"
+    effect    = "Allow"
+    actions   = ["logs:DescribeLogGroups"]
+    resources = ["*"]
   }
 
   statement {
@@ -332,7 +339,6 @@ data "aws_iam_policy_document" "analytics_and_dashboard" {
       "glue:GetCrawler",
       "glue:GetDatabase",
       "glue:GetJob",
-      "glue:GetSecurityConfiguration",
       "glue:GetTable",
       "glue:GetTags",
       "glue:TagResource",
@@ -351,6 +357,13 @@ data "aws_iam_policy_document" "analytics_and_dashboard" {
       "arn:${data.aws_partition.current.partition}:glue:${data.aws_region.current.name}:${data.aws_caller_identity.current.account_id}:job/streamforge-*",
       "arn:${data.aws_partition.current.partition}:glue:${data.aws_region.current.name}:${data.aws_caller_identity.current.account_id}:securityConfiguration/streamforge-*",
     ]
+  }
+
+  statement {
+    sid       = "ReadGlueSecurityConfigurations"
+    effect    = "Allow"
+    actions   = ["glue:GetSecurityConfiguration"]
+    resources = ["*"]
   }
 
   statement {

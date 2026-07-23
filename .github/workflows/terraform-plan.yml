@@ -18,7 +18,6 @@ permissions:
 jobs:
   plan-dev:
     name: Dev plan
-    if: vars.AWS_ROLE_TO_ASSUME != ''
     environment: dev
     runs-on: ubuntu-24.04
     defaults:

@@ -1,20 +1,55 @@
 # StreamForge
 
-StreamForge is a serverless AWS data pipeline that validates customer CSV files
-uploaded to Amazon S3. Phase 1 routes S3 events through EventBridge to Lambda,
-then stores valid and rejected rows separately. Phase 1 now also writes a
-sidecar processing manifest for each source file so downstream phases can use
-stable lineage metadata. Phase 2 adds AWS Glue and Athena so the cleaned data
-can be queried with SQL. Phase 4 begins the Terraform adoption of the deployed
-AWS footprint so the platform can be recreated and governed as code.
+StreamForge is a secure, serverless AWS data platform for customer CSV files.
+Authenticated users upload a file through a CloudFront-hosted dashboard; S3,
+EventBridge, Lambda, Glue, and Athena then validate, transform, and expose it
+for analytics. The platform is provisioned with Terraform, encrypted with
+customer-managed KMS keys, and protected by least-privilege IAM, WAF, private
+S3 origins, CloudWatch monitoring, SNS alerts, and GitHub OIDC.
 
-## Phase 1 architecture
+The project is implemented through four phases:
+
+1. **Ingestion and quality** — EventBridge-driven Lambda validation, clean and
+   rejected outputs, plus a lineage manifest for every upload.
+2. **Query foundation** — Glue crawler/Data Catalog and encrypted Athena
+   workgroups for the clean layer.
+3. **Business curation** — Glue transforms clean CSV into partitioned
+   Parquet/Snappy, enriches lineage, applies business rules, and quarantines
+   malformed transformed rows.
+4. **Platform engineering** — Terraform, CI/CD, GitHub OIDC, SSE-KMS,
+   observability, operational runbooks, dashboard security, and recovery
+   guidance.
+
+## Architecture
 
 ```text
-CSV -> Raw S3 -> EventBridge -> Lambda -> Clean S3 / Rejected S3
+Authenticated dashboard -> API Gateway -> presigned S3 upload
+                                      |
+Raw S3 -> EventBridge -> Lambda validator -> Clean S3 / Rejected S3 / Metadata S3
+                                                |
+                                         Glue crawler + Glue ETL
+                                                |
+                                Curated Parquet S3 / Quarantine S3 -> Athena
 ```
 
 See [the architecture document](docs/architecture.md) for more detail.
+
+## Current status
+
+| Capability | Status |
+| --- | --- |
+| Phase 1 validation and lineage manifests | Implemented and smoke-tested in AWS |
+| Phase 2 Glue/Athena clean-data queries | Implemented |
+| Phase 3 curated Parquet business layer | Implemented and smoke-tested in AWS |
+| Dashboard, Cognito, CloudFront OAC, and WAF | Implemented |
+| Terraform remote state, CI, security scanning, and GitHub OIDC | Implemented |
+| CloudWatch/SNS operational alerting | Implemented; CloudWatch actions and Athena failure route tested |
+| Lambda reserved concurrency | Pending AWS regional quota approval |
+| Separate production account/environment | Pending |
+
+The current development dashboard is available at
+[https://d27fbjnqnw3vzk.cloudfront.net](https://d27fbjnqnw3vzk.cloudfront.net).
+It requires a Cognito user account.
 
 ## Services
 
@@ -28,11 +63,15 @@ See [the architecture document](docs/architecture.md) for more detail.
 - AWS Key Management Service (KMS)
 - Amazon CloudFront
 - Amazon Cognito
+- Amazon API Gateway
+- AWS WAF
+- Amazon SNS and Amazon SQS
+- AWS IAM and GitHub Actions OIDC
 - Terraform
 
-## Phase 4 foundation
+## Infrastructure, security, and operations
 
-Track A introduces the initial Terraform adoption layout:
+Terraform is the source of truth for the deployed development environment:
 
 - `terraform/bootstrap/backend`
 - `terraform/environments/dev`
@@ -42,10 +81,10 @@ Track A introduces the initial Terraform adoption layout:
 - `terraform/modules/phase2_analytics`
 - `terraform/modules/phase3_curated`
 
-Track A adopts the deployed KMS/S3, Phase 1 runtime, Phase 2 analytics, and
-Phase 3 curated layers. Track B adds encrypted operational alerting, an
-EventBridge dead-letter queue, CloudWatch alarms and dashboarding, and incident
-runbooks. See the [Terraform import guide](docs/terraform-import-guide.md) and
+It manages KMS/S3, the Phase 1 runtime, Phase 2 analytics, Phase 3 curated
+layers, the dashboard, encrypted alerting, dead-letter queues, CloudWatch
+alarms/dashboards, and incident runbooks. See the
+[Terraform import guide](docs/terraform-import-guide.md) and
 [monitoring flow](docs/diagrams/monitoring-flow.md).
 
 Phase 4 also includes [CI/CD and promotion guidance](docs/github-environments.md),
@@ -152,12 +191,16 @@ Results appear in `local_buckets\clean\` and `local_buckets\rejected\`, and the
 processing statistics are logged to the console. You can also target one file:
 `python scripts\run_local.py sample_data\customers.csv`.
 
-## Deployment (AWS Phase 1)
+## Legacy manual deployment reference (AWS Phase 1)
 
-Terraform is out of scope for Phase 1; the steps below use the AWS CLI. Pick
-**globally unique** bucket names. Commands are shown in bash — adjust variable
-syntax if you run them from PowerShell. The current implementation also uses a
-metadata bucket for Phase 1 manifests.
+Terraform is the supported provisioning path for StreamForge. The CLI steps
+below are retained as a learning reference for the original Phase 1 build; do
+not use them to change the Terraform-managed development environment.
+
+The original Phase 1 build used the AWS CLI. Pick **globally unique** bucket
+names if following these historical instructions. Commands are shown in bash —
+adjust variable syntax if you run them from PowerShell. The current
+implementation also uses a metadata bucket for Phase 1 manifests.
 
 > One-command option: steps 1–5 are bundled in `scripts/deploy.sh` (idempotent).
 > Run it, then do step 6 to test:
@@ -444,7 +487,18 @@ total_customers,total_sales,average_sales
 2,1500,750.0
 ```
 
-## Future enhancements
+## Remaining work
 
-Later phases may add Terraform, Aurora, AWS SCT, and AWS DMS. They are
-intentionally outside the current implementation.
+- Apply Lambda reserved concurrency after AWS approves the regional concurrency
+  quota increase.
+- Verify the Glue failure EventBridge rule with an event emitted by a normally
+  running Glue job.
+- Approve and complete the reviewer-gated Terraform drift workflow.
+- Create a separate production AWS account, Terraform state, OIDC role, and
+  GitHub `prod` environment.
+- Consider a custom domain/ACM certificate, cross-region recovery, Lambda code
+  signing, and immutable GitHub Action pins for additional production maturity.
+
+For the detailed collaborator context and operational status, see
+[docs/agent-handoff.md](docs/agent-handoff.md) and the
+[definition of done](docs/definition-of-done.md).

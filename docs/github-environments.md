@@ -1,10 +1,10 @@
 # GitHub environments and deployment roles
 
-The repository has a `dev` GitHub environment. Add a separate `prod`
-environment only when a production AWS account and its deployment role exist.
-Require reviewers for both when the repository plan supports environment
-protection rules; production must require a separate approval after dev
-integration tests complete.
+The public repository has a configured `dev` GitHub environment. Its required
+reviewer is `ashutoshg-2005`; deployment jobs pause until that reviewer approves
+them. Add a separate `prod` environment only when a production AWS account and
+its deployment role exist. Production must require a separate approval after
+dev integration tests complete.
 
 Set these environment variables in each environment:
 
@@ -32,8 +32,8 @@ to `repo:happi2307/StreamForge:environment:dev` or
 separate AWS account where possible.
 
 `terraform-plan.yml` runs a read-only dev plan whenever it is dispatched or a
-relevant pull request is opened. `terraform-apply-dev.yml` requires both a
-manual dispatch and the literal
+relevant pull request is opened. `terraform-apply-dev.yml` requires reviewer
+approval, a manual dispatch, and the literal
 confirmation value `deploy`; GitHub environment approval is the second gate.
 `terraform-apply-prod.yml` requires a separate production approval and the
 literal confirmation value `deploy-prod`.

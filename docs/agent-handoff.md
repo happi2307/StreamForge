@@ -87,7 +87,7 @@ flowchart LR
 | Phase 3 ETL | Implemented | Glue job, schemas, Parquet/Snappy output, date partitions, business transformations, threshold-aware quarantine, curated table/workgroup. |
 | Web dashboard | Implemented | Cognito sign-in, upload, status polling, valid/rejected counts, and expiring download URLs. |
 | Infrastructure as code | Implemented | Reusable Terraform modules plus independent `dev` and `prod` roots. |
-| Operational controls | Implemented | CloudWatch alarms/dashboard, encrypted SNS alerts, SQS DLQs, EventBridge failure handling, runbooks. |
+| Operational controls | Implemented; alarm exercises pending | CloudWatch alarms/dashboard, encrypted SNS alerts, SQS DLQs, EventBridge failure handling, and runbooks. SNS topic delivery is verified; individual alarm paths still need exercising. |
 | Security controls | Implemented | SSE-KMS, private buckets, CloudFront OAC, WAF managed rules, IAM scoping, logging, retention, and TLS enforcement. |
 | CI and security scanning | Implemented | Python tests, Lambda packaging checks, Terraform fmt/validate, gitleaks, Trivy, and Checkov. |
 | Documentation | Implemented | Architecture, ADRs, runbooks, Terraform import process, GitHub environment setup, disaster recovery, and definition of done. |
@@ -107,6 +107,34 @@ The most recent hardening work added centralized S3 access logging, CloudFront
 logging, WAF logging, dashboard-edge controls, and Checkov remediation. Verify
 that the active `dev` environment has had those changes applied before relying
 on them operationally.
+
+### Live dev activation snapshot — 2026-07-25
+
+The following has been applied and verified in the development AWS account
+(`108379846489`, `us-east-1`). This is a dated operational snapshot, not a
+substitute for a new plan before making changes:
+
+- GitHub Actions uses the AWS IAM OIDC provider and assumes
+  `streamforge-dev-github-actions`. Its trust policy is restricted to the
+  `happi2307/StreamForge` repository and the GitHub `dev` environment; it does
+  not use stored AWS access keys.
+- The GitHub `dev` environment contains the required state/backend and Terraform
+  input variables. A GitHub Actions Terraform plan completed successfully,
+  proving OIDC role assumption, KMS decryption, S3 remote-state access, and
+  DynamoDB lock-table access.
+- The encrypted SNS topic `streamforge-dev-alerts` has a confirmed email
+  subscription for `kumarakshat868@gmail.com`. A labelled manual test message
+  was delivered successfully. This validates SNS topic delivery, but each
+  CloudWatch alarm path still needs a separate exercise.
+- The account's Lambda regional concurrency quota is exactly 10. The desired
+  configuration reserves five concurrent executions each for the processor and
+  dashboard API Lambdas, but AWS must retain 10 unreserved executions. A quota
+  increase request is open (case `178482111400370`). Until approved, a full
+  Terraform apply will propose these two changes but cannot complete them.
+- The repository is public. GitHub `dev` has a required-reviewer protection
+  rule for `ashutoshg-2005`, so deployment jobs require an independent approval.
+  Production is intentionally not activated because no separate production AWS
+  account/role is available.
 
 ### CI status at the time of this handoff
 
@@ -252,16 +280,16 @@ Architecture decisions are documented in `docs/adr/`:
 | Amazon Athena | Serverless SQL queries over clean and curated S3 data. | Workgroups enforce encrypted result locations and support query cost governance. |
 | Amazon CloudWatch | Logs, metrics, alarms, dashboards, and log retention. | Log groups are explicitly managed and KMS encrypted. |
 | AWS X-Ray | Tracing for the Phase 1 Lambda. | Helps diagnose latency and AWS downstream calls. |
-| Amazon SNS | Operational alert notifications. | Alert topic is encrypted; email subscription must be confirmed in each live environment. |
+| Amazon SNS | Operational alert notifications. | Alert topic is encrypted. The confirmed dev email subscription and a manual delivery test are verified; CloudWatch alarm-action tests remain. |
 | Amazon Cognito | Dashboard user authentication. | User Pool/Hosted UI, strong password policy, Authorization Code + PKCE browser flow. |
 | Amazon API Gateway | Dashboard HTTP API. | HTTP API routes use a Cognito JWT authorizer; CORS is restricted to approved dashboard origins. |
 | Amazon CloudFront | HTTPS delivery of the dashboard. | Uses private S3 origin access control, HTTPS redirect, security headers, and access logging. |
 | AWS WAF | Dashboard edge protection. | CloudFront-associated Web ACL uses AWS managed Common Rule Set and Known Bad Inputs rules; WAF logs are sent to encrypted CloudWatch storage. |
 | AWS IAM | Authentication and authorization between all services. | Roles are split by responsibility and policies are scoped to specific data buckets, keys, and actions. |
 | Amazon DynamoDB | Terraform state locking. | Prevents concurrent state writes during Terraform operations. |
-| AWS STS / GitHub OIDC | Intended CI/CD AWS authentication. | GitHub assumes short-lived, environment-scoped roles; no long-lived AWS access keys should be stored in GitHub. |
+| AWS STS / GitHub OIDC | CI/CD AWS authentication. | GitHub `dev` assumes a short-lived, environment-scoped role; no long-lived AWS access keys are stored in GitHub. Bootstrap/IAM-policy changes remain a local privileged Terraform responsibility to avoid CI self-escalation. |
 | Terraform | Infrastructure provisioning and reconciliation. | Reusable modules, remote state, versioning, import guidance, and drift workflow. Not an AWS service. |
-| GitHub Actions | CI/CD and security automation. | Tests, packages Linux-compatible Lambda ZIPs, validates Terraform, scans secrets/vulnerabilities/policy, and contains manual deployment/drift workflows. |
+| GitHub Actions | CI/CD and security automation. | Tests, packages Linux-compatible Lambda ZIPs, validates Terraform, scans secrets/vulnerabilities/policy, and contains manual deployment/drift workflows. Dev AWS authentication is live through OIDC and short-lived role credentials. |
 
 ### Required exception awareness
 
@@ -321,7 +349,7 @@ Workflow files live under `.github/workflows/`:
 | `terraform-apply-prod.yml` | Manually dispatched production deployment after the separate production approval gate. |
 | `terraform-drift.yml` | Scheduled/manual dev drift detection. |
 
-GitHub deployment environments must contain these variables:
+The live GitHub `dev` environment contains these backend/authentication variables:
 
 ```text
 AWS_ROLE_TO_ASSUME
@@ -330,6 +358,11 @@ TF_STATE_BUCKET
 TF_STATE_KEY
 TF_LOCK_TABLE
 ```
+
+It also contains non-secret `TF_VAR_*` values for the deployed bucket-name
+overrides, ownership/cost tags, and KMS configuration. The workflows map the
+uppercase GitHub variable names to Terraform's case-sensitive lowercase input
+environment variables. Do not replace this with AWS access-key secrets.
 
 The intended promotion path is:
 
@@ -422,12 +455,13 @@ S3 lockfiles (`use_lockfile`) rather than making an unreviewed backend change.
 
 ### Needed to finish the platform activation
 
-1. Verify and, if approved, apply the newest Terraform security/logging changes
-   to the live dev environment.
-2. Configure GitHub `dev` and `prod` environments, reviewer gates, and
-   environment-specific OIDC roles; then test plan, deployment, and drift
-   workflows.
-3. Confirm the SNS subscription and exercise every CloudWatch alarm path.
+1. Exercise the applicable CloudWatch alarm paths and record the delivery
+   evidence in the related runbooks.
+2. Wait for or obtain a Lambda regional concurrency quota increase, then run a
+   reviewed full dev Terraform apply to set the two five-execution reservations.
+3. Configure an independent reviewer/team as the GitHub `dev` environment
+   protection rule. Do not use the repository owner as a cosmetic approval
+   gate.
 4. Create and validate the independent production environment in its target AWS
    account; do not reuse dev credentials or state.
 5. Run a full AWS smoke test: dashboard upload, EventBridge/Lambda execution,
@@ -479,4 +513,6 @@ S3 lockfiles (`use_lockfile`) rather than making an unreviewed backend change.
       editing.
 - [ ] For AWS work, confirm profile/account/region and make a plan before an
       apply.
+- [ ] Check the dated live-dev activation snapshot above before selecting the
+      next deployment or operational task.
 - [ ] Update tests and documentation with every behavior or architecture change.

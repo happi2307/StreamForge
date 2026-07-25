@@ -115,6 +115,16 @@ module "kms" {
       principals  = ["sqs.amazonaws.com"]
       via_service = "sqs.${data.aws_region.current.name}.amazonaws.com"
     },
+    {
+      sid         = "AllowRdsUse"
+      principals  = ["rds.amazonaws.com"]
+      via_service = "rds.${data.aws_region.current.name}.amazonaws.com"
+    },
+    {
+      sid         = "AllowSecretsManagerUse"
+      principals  = ["secretsmanager.amazonaws.com"]
+      via_service = "secretsmanager.${data.aws_region.current.name}.amazonaws.com"
+    },
   ]
   direct_service_key_access = [
     {
@@ -141,6 +151,7 @@ module "kms" {
     "arn:aws:logs:${data.aws_region.current.name}:${data.aws_caller_identity.current.account_id}:log-group:aws-waf-logs-${var.project_name}-${var.environment}-dashboard",
     "arn:aws:logs:${data.aws_region.current.name}:${data.aws_caller_identity.current.account_id}:log-group:/aws-glue/jobs/${var.phase3_glue_job_name}-security-role/${var.phase3_glue_job_role_name}/error",
     "arn:aws:logs:${data.aws_region.current.name}:${data.aws_caller_identity.current.account_id}:log-group:/aws-glue/jobs/${var.phase3_glue_job_name}-security-role/${var.phase3_glue_job_role_name}/output",
+    "arn:aws:logs:${data.aws_region.current.name}:${data.aws_caller_identity.current.account_id}:log-group:/aws/lambda/${var.phase5_loader_function_name}",
   ]
   tags = merge(local.common_tags, { Name = var.kms_alias_name })
 }
@@ -312,6 +323,35 @@ module "phase4_operations" {
   })
 }
 
+module "phase5_serving" {
+  source = "../../modules/phase5_serving"
+
+  name_prefix               = "${var.project_name}-${var.environment}"
+  environment               = var.environment
+  kms_key_arn               = module.kms.key_arn
+  vpc_cidr                  = var.phase5_vpc_cidr
+  subnet_cidrs              = var.phase5_subnet_cidrs
+  db_name                   = var.phase5_db_name
+  db_schema                 = var.phase5_db_schema
+  serverless_min_acu        = var.phase5_serverless_min_acu
+  serverless_max_acu        = var.phase5_serverless_max_acu
+  curated_bucket_name       = module.buckets["curated"].bucket_name
+  curated_bucket_arn        = module.buckets["curated"].bucket_arn
+  curated_bucket_id         = module.buckets["curated"].bucket_id
+  metadata_bucket_arn       = module.buckets["metadata"].bucket_arn
+  alert_topic_arn           = module.phase4_operations.alert_topic_arn
+  pipeline_metric_namespace = var.pipeline_metric_namespace
+  pipeline_version          = var.phase5_pipeline_version
+  loader_function_name      = var.phase5_loader_function_name
+  loader_role_name          = var.phase5_loader_role_name
+  loader_inline_policy_name = var.phase5_loader_inline_policy_name
+  loader_package_path       = var.phase5_loader_package_path
+  event_rule_name           = var.phase5_event_rule_name
+  tags = merge(local.common_tags, {
+    Service = "phase5-serving"
+  })
+}
+
 module "web_console" {
   source = "../../modules/web_console"
 
@@ -356,6 +396,7 @@ module "github_actions_oidc" {
     var.dashboard_lambda_function_name == "" ? "" : "${var.dashboard_lambda_function_name}-role",
     var.glue_crawler_role_name,
     var.phase3_glue_job_role_name,
+    var.phase5_loader_role_name,
   ]
   tags = merge(local.common_tags, { Service = "github-actions-oidc" })
 }

@@ -91,6 +91,35 @@ Phase 4 also includes [CI/CD and promotion guidance](docs/github-environments.md
 [disaster-recovery assumptions](docs/disaster-recovery.md), and a
 [definition of done](docs/definition-of-done.md).
 
+## Phase 5 serving layer
+
+Phase 5 adds an automated relational **serving layer**: curated Parquet is
+loaded into an Amazon Aurora PostgreSQL (Serverless v2) database so dashboards,
+applications, and reporting can query production-ready, indexed, transactional
+tables. A curated `Object Created` event triggers the database loader Lambda,
+which runs a staging → validate → MERGE → audit workflow inside one transaction,
+idempotently by batch.
+
+Key pieces:
+
+- `database/` — schema, indexes, constraints (schemas `staging`, `analytics`, `audit`).
+- `sql/` — `merge.sql`, `validation.sql`, `audit_queries.sql`.
+- `lambda/database_loader/` — the pg8000/pyarrow loader (`handler`, `loader`, `db`).
+- `terraform/modules/phase5_serving/` — private VPC + endpoints, Aurora
+  Serverless v2, in-VPC loader, IAM, EventBridge, CloudWatch alarms/dashboard,
+  reusing the Phase 4 SNS topic. Wired into `terraform/environments/dev`.
+
+Highlights: idempotent/incremental loading keyed on the batch id, transaction
+rollback with no partial loads, per-record error capture to `audit.load_errors`,
+Secrets Manager credentials, KMS encryption, and structured JSON logging. Build
+the loader archive with `python scripts/package_lambdas.py --environment dev
+--include-loader`.
+
+See the [database architecture](docs/database-architecture.md),
+[ADR 005](docs/adr/005-aurora-serverless-v2-serving-layer.md), and the
+[loader runbook](docs/runbooks/phase5-database-loader.md). SCT/DMS-based
+heterogeneous migration is deferred to Phase 6.
+
 ## Web dashboard
 
 The dashboard provides authenticated CSV upload, processing status, row-level

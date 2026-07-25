@@ -86,6 +86,26 @@ output "operations_dashboard_name" {
   value       = module.phase4_operations.dashboard_name
 }
 
+output "phase5_cluster_endpoint" {
+  description = "Aurora PostgreSQL writer endpoint for the serving layer."
+  value       = module.phase5_serving.cluster_endpoint
+}
+
+output "phase5_database_secret_arn" {
+  description = "ARN of the Aurora master credentials secret in Secrets Manager."
+  value       = module.phase5_serving.database_secret_arn
+}
+
+output "phase5_loader_function_name" {
+  description = "Name of the Phase 5 database loader Lambda."
+  value       = module.phase5_serving.loader_function_name
+}
+
+output "phase5_dashboard_name" {
+  description = "Name of the Phase 5 CloudWatch dashboard."
+  value       = module.phase5_serving.dashboard_name
+}
+
 output "web_console_api_endpoint" { value = module.web_console.api_endpoint }
 output "web_console_user_pool_id" { value = module.web_console.user_pool_id }
 output "web_console_user_pool_client_id" { value = module.web_console.user_pool_client_id }

@@ -139,6 +139,8 @@ module "kms" {
     "arn:aws:logs:${data.aws_region.current.name}:${data.aws_caller_identity.current.account_id}:log-group:/aws/lambda/${var.dashboard_lambda_function_name}",
     "arn:aws:logs:${data.aws_region.current.name}:${data.aws_caller_identity.current.account_id}:log-group:/aws/apigateway/${var.project_name}-${var.environment}-dashboard-api",
     "arn:aws:logs:${data.aws_region.current.name}:${data.aws_caller_identity.current.account_id}:log-group:aws-waf-logs-${var.project_name}-${var.environment}-dashboard",
+    "arn:aws:logs:${data.aws_region.current.name}:${data.aws_caller_identity.current.account_id}:log-group:/aws-glue/jobs/${var.phase3_glue_job_name}-security-role/${var.phase3_glue_job_role_name}/error",
+    "arn:aws:logs:${data.aws_region.current.name}:${data.aws_caller_identity.current.account_id}:log-group:/aws-glue/jobs/${var.phase3_glue_job_name}-security-role/${var.phase3_glue_job_role_name}/output",
   ]
   tags = merge(local.common_tags, { Name = var.kms_alias_name })
 }

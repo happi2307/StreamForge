@@ -3,6 +3,12 @@ locals {
   athena_output_location           = format("s3://%s/%s/", var.athena_results_bucket_name, local.normalized_athena_results_prefix)
 }
 
+data "aws_caller_identity" "current" {}
+
+data "aws_partition" "current" {}
+
+data "aws_region" "current" {}
+
 data "aws_iam_policy_document" "job_assume_role" {
   statement {
     effect = "Allow"
@@ -77,6 +83,19 @@ data "aws_iam_policy_document" "job_data_access" {
       variable = "cloudwatch:namespace"
       values   = [var.pipeline_metric_namespace]
     }
+  }
+
+  # Glue associates the configured KMS key with its continuous-log groups at
+  # job startup. Scope the permission to this job's security-configuration and
+  # role-specific log-group namespace rather than granting account-wide access.
+  statement {
+    effect = "Allow"
+    actions = [
+      "logs:AssociateKmsKey",
+    ]
+    resources = [
+      "arn:${data.aws_partition.current.partition}:logs:${data.aws_region.current.name}:${data.aws_caller_identity.current.account_id}:log-group:/aws-glue/jobs/${var.glue_job_name}-security-role/${var.glue_job_role_name}/*",
+    ]
   }
 }
 

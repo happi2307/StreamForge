@@ -11,6 +11,10 @@ the Phase 3 Glue job fails, times out, or is stopped.
 2. Identify the Phase 1 manifest and clean object associated with the run.
 3. Check the quarantine prefix and the `RowsRead`, `RowsWritten`, and `RowsQuarantined` dashboard metrics.
 4. Confirm the Glue role retains S3 and KMS access to clean, metadata, curated, and quarantine buckets.
+5. For encrypted continuous logs, verify the Glue role has
+   `logs:AssociateKmsKey` scoped to this job's log groups and that the KMS key
+   policy permits the CloudWatch Logs encryption contexts for both `error` and
+   `output` groups.
 
 ## Recover
 

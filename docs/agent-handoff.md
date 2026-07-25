@@ -84,7 +84,7 @@ flowchart LR
 | Phase 1 lineage manifests | Implemented | Source and processing metadata is written as a sidecar JSON object for downstream enrichment. |
 | Event-driven ingestion | Implemented | Raw S3 uses EventBridge; EventBridge invokes the Lambda asynchronously. |
 | Phase 2 analytics | Implemented | Glue database, crawler, canonical clean table, and KMS-encrypted Athena results/workgroup are Terraform-managed. |
-| Phase 3 ETL | Implemented | Glue job, schemas, Parquet/Snappy output, date partitions, business transformations, threshold-aware quarantine, curated table/workgroup. |
+| Phase 3 ETL | Implemented and smoke-tested | Glue job, schemas, Parquet/Snappy output, date partitions, business transformations, threshold-aware quarantine, curated table/workgroup. The encrypted Glue logging permission was verified in dev on 2026-07-25. |
 | Web dashboard | Implemented | Cognito sign-in, upload, status polling, valid/rejected counts, and expiring download URLs. |
 | Infrastructure as code | Implemented | Reusable Terraform modules plus independent `dev` and `prod` roots. |
 | Operational controls | Implemented; alarm exercises pending | CloudWatch alarms/dashboard, encrypted SNS alerts, SQS DLQs, EventBridge failure handling, and runbooks. SNS topic delivery is verified; individual alarm paths still need exercising. |
@@ -131,6 +131,19 @@ substitute for a new plan before making changes:
   dashboard API Lambdas, but AWS must retain 10 unreserved executions. A quota
   increase request is open (case `178482111400370`). Until approved, a full
   Terraform apply will propose these two changes but cannot complete them.
+- A complete dev data-path smoke test passed on 2026-07-25: a four-row CSV
+  produced two clean rows, two rejected rows, and a lineage manifest; the
+  isolated Phase 3 job then wrote KMS-protected Parquet to the ingestion-date
+  partition. Athena returned the two curated records with `Medium` and `High`
+  sales categories. The original Glue job run revealed and the follow-up
+  Terraform change fixed its missing `logs:AssociateKmsKey` permission and KMS
+  log-group encryption contexts.
+- All five CloudWatch metric alarms were exercised through controlled state
+  transitions and restored to `OK`. The Athena failure EventBridge rule was
+  verified with one invocation and zero failed deliveries. The Glue failure
+  rule is enabled with the correct target but remains explicitly unverified:
+  an initialization failure and immediately stopped run did not emit a matched
+  Glue event.
 - The repository is public. GitHub `dev` has a required-reviewer protection
   rule for `ashutoshg-2005`, so deployment jobs require an independent approval.
   Production is intentionally not activated because no separate production AWS
@@ -455,8 +468,8 @@ S3 lockfiles (`use_lockfile`) rather than making an unreviewed backend change.
 
 ### Needed to finish the platform activation
 
-1. Exercise the applicable CloudWatch alarm paths and record the delivery
-   evidence in the related runbooks.
+1. Verify the Glue failure EventBridge rule with an event from a normally
+   running Glue job, then record the delivery evidence in its runbook.
 2. Wait for or obtain a Lambda regional concurrency quota increase, then run a
    reviewed full dev Terraform apply to set the two five-execution reservations.
 3. Configure an independent reviewer/team as the GitHub `dev` environment

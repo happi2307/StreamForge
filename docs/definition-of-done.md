@@ -6,7 +6,9 @@
 - [x] Monitoring, alerting resources, dashboard, DLQ, and incident runbooks are deployed in dev.
 - [x] Terraform validation, formatting, and Python tests pass locally.
 - [x] Configure and confirm the dev SNS email subscription; end-to-end topic delivery is verified.
-- [ ] Test each CloudWatch alarm path and record the evidence in the runbooks.
+- [x] Test each CloudWatch alarm SNS action through controlled state transitions; alarms were restored to `OK`.
+- [x] Verify the Athena failure EventBridge rule through a controlled failed query with one invocation and zero delivery failures.
+- [ ] Verify the Glue failure EventBridge rule using an event emitted by a normally running Glue job; startup-abort and immediate-stop runs did not produce a matched event.
 - [x] Pull-request CI, security scanning, promotion workflow, and scheduled drift workflow are versioned in this repository.
 - [x] Configure GitHub `dev` OIDC deployment role, environment variables, and an independent required reviewer.
 - [ ] Configure the separate GitHub `prod` environment, required approvals, and OIDC deployment role.

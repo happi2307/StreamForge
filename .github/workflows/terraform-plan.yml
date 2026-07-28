@@ -26,6 +26,7 @@ jobs:
       TF_VAR_kms_alias_name: ${{ vars.TF_VAR_KMS_ALIAS_NAME }}
       TF_VAR_kms_description: ${{ vars.TF_VAR_KMS_DESCRIPTION }}
       TF_VAR_bucket_name_overrides: ${{ vars.TF_VAR_BUCKET_NAME_OVERRIDES }}
+      TF_VAR_operations_alert_email: ${{ vars.TF_VAR_OPERATIONS_ALERT_EMAIL }}
     defaults:
       run:
         working-directory: terraform/environments/dev

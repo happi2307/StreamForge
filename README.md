@@ -43,8 +43,8 @@ See [the architecture document](docs/architecture.md) for more detail.
 | Phase 3 curated Parquet business layer | Implemented and smoke-tested in AWS |
 | Dashboard, Cognito, CloudFront OAC, and WAF | Implemented |
 | Terraform remote state, CI, security scanning, and GitHub OIDC | Implemented |
-| CloudWatch/SNS operational alerting | Implemented; CloudWatch actions and Athena failure route tested |
-| Lambda reserved concurrency | Pending AWS regional quota approval |
+| CloudWatch/SNS operational alerting | Implemented and tested, including Athena and Glue failure routes |
+| Lambda reserved concurrency | Applied: 5 per Lambda, 990 unreserved account concurrency |
 | Separate production account/environment | Pending |
 
 The current development dashboard is available at
@@ -489,11 +489,6 @@ total_customers,total_sales,average_sales
 
 ## Remaining work
 
-- Apply Lambda reserved concurrency after AWS approves the regional concurrency
-  quota increase.
-- Verify the Glue failure EventBridge rule with an event emitted by a normally
-  running Glue job.
-- Approve and complete the reviewer-gated Terraform drift workflow.
 - Create a separate production AWS account, Terraform state, OIDC role, and
   GitHub `prod` environment.
 - Consider a custom domain/ACM certificate, cross-region recovery, Lambda code

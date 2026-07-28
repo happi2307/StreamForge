@@ -5,6 +5,14 @@
 The `streamforge-dev-glue-job-failures` EventBridge rule sends an SNS alert when
 the Phase 3 Glue job fails, times out, or is stopped.
 
+## Verified alert path
+
+On 2026-07-28, controlled batch
+`jr_3dca0bb9f6c88f5d3c431e6652ba035e3f85d7ae8435909c707c097f447dd4fb`
+failed after startup because its sole row was quarantined for invalid sales.
+The rule recorded one invocation and no `FailedInvocations`; the isolated input
+and metadata objects were then removed.
+
 ## Investigate
 
 1. Open the Glue job run for `streamforge-transform-customers` and review the error and continuous logs.

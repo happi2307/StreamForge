@@ -20,6 +20,7 @@ Set these environment variables in each environment:
 | `TF_VAR_KMS_ALIAS_NAME` | Existing environment KMS alias used when reconciling dev |
 | `TF_VAR_KMS_DESCRIPTION` | Existing environment KMS key description used when reconciling dev |
 | `TF_VAR_BUCKET_NAME_OVERRIDES` | JSON map of existing dev bucket names used during reconciliation |
+| `TF_VAR_OPERATIONS_ALERT_EMAIL` | Confirmed SNS email endpoint used by the operations module |
 
 GitHub normalizes configuration-variable names to uppercase. The dev Terraform
 workflows map these variables into Terraform's case-sensitive lower-case
@@ -37,6 +38,10 @@ approval, a manual dispatch, and the literal
 confirmation value `deploy`; GitHub environment approval is the second gate.
 `terraform-apply-prod.yml` requires a separate production approval and the
 literal confirmation value `deploy-prod`.
+
+`terraform-drift.yml` packages the same Lambda archives, then runs a
+`terraform plan -refresh-only`. This detects remote state drift without
+reporting runner-specific static-asset paths as configuration changes.
 
 ## Promotion flow
 

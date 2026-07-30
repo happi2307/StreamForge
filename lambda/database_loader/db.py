@@ -107,6 +107,12 @@ class Database:
         else:
             self._conn.run("COMMIT")
 
+    def apply_schema(self, scripts: Sequence[str]) -> None:
+        """Apply the packaged idempotent schema scripts atomically."""
+        with self.transaction():
+            for script in scripts:
+                self._conn.run(script)
+
     # -- idempotency --------------------------------------------------------
     def get_batch_status(self, batch_id: str) -> str | None:
         rows = self._conn.run(

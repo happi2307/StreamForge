@@ -21,6 +21,7 @@ from zipfile import ZIP_DEFLATED, ZipFile
 REPOSITORY_ROOT = Path(__file__).resolve().parents[1]
 PHASE1_SOURCE_FILES = ("handler.py", "metadata.py", "validator.py")
 DATABASE_LOADER_SOURCE_FILES = ("handler.py", "db.py", "loader.py")
+DATABASE_SCHEMA_FILES = ("schema.sql", "indexes.sql", "constraints.sql")
 EXCLUDED_RUNTIME_DIRECTORIES = {"__pycache__", "test", "tests", "testing"}
 EXCLUDED_RUNTIME_SUFFIXES = {".pyc", ".pyo"}
 
@@ -103,7 +104,7 @@ def package_database_loader(output_path: Path) -> None:
                 "--disable-pip-version-check",
                 "--only-binary=:all:",
                 "--platform",
-                "manylinux2014_x86_64",
+                "manylinux_2_28_x86_64",
                 "--implementation",
                 "cp",
                 "--python-version",
@@ -118,6 +119,10 @@ def package_database_loader(output_path: Path) -> None:
 
         for filename in DATABASE_LOADER_SOURCE_FILES:
             shutil.copy2(source_directory / filename, staging_directory / filename)
+        schema_directory = staging_directory / "database"
+        schema_directory.mkdir()
+        for filename in DATABASE_SCHEMA_FILES:
+            shutil.copy2(REPOSITORY_ROOT / "database" / filename, schema_directory / filename)
 
         temporary_archive = build_directory / f"{output_path.name}.tmp"
         with ZipFile(temporary_archive, "w", ZIP_DEFLATED) as archive:

@@ -13,7 +13,8 @@ networking, and driver decisions, and
 
 ```mermaid
 flowchart LR
-    Curated["Curated Parquet S3"] --> EB["EventBridge (Object Created)"]
+    Curated["Curated Parquet S3"] --> Glue["Phase 3 batch manifest"]
+    Glue --> EB["EventBridge (Curated Batch Ready)"]
     EB --> Loader["Database Loader Lambda (in VPC)"]
     Secrets["Secrets Manager\n(RDS-managed secret)"] --> Loader
     Loader -->|"pg8000 / 5432"| Aurora[("Aurora PostgreSQL\nServerless v2")]
@@ -41,7 +42,8 @@ flowchart LR
 
 DDL lives in `database/schema.sql`, `database/indexes.sql`, and
 `database/constraints.sql`. Indexes cover the business keys `customer_id`,
-`batch_id`, and `processed_timestamp`.
+`batch_id`, and `processed_timestamp`. Terraform packages these scripts with
+the private loader and invokes its idempotent bootstrap after Aurora is ready.
 
 Column names mirror the Phase 3 curated dataset produced by
 `jobs/transform_helpers.py`; the Phase 3 `phase3_batch_id` is the Phase 5
@@ -51,7 +53,8 @@ Column names mirror the Phase 3 curated dataset produced by
 
 ```mermaid
 flowchart TD
-    A["Curated object event"] --> B["Read Parquet (pyarrow)"]
+    A["Curated Batch Ready event"] --> M["Read batch manifest + verify checksum"]
+    M --> B["Read listed Parquet objects (DuckDB)"]
     B --> C{"Batch already SUCCESS?"}
     C -- yes --> Skip["Log SKIPPED · stop"]
     C -- no --> D["Normalize + validate rows"]
@@ -168,6 +171,5 @@ terraform fmt -check -recursive terraform
 terraform -chdir=terraform/environments/dev init -backend=false
 terraform -chdir=terraform/environments/dev validate
 
-# 3. After a reviewed apply, bootstrap the schema once (from a host with access):
-#    psql "$AURORA_URL" -f database/schema.sql -f database/indexes.sql -f database/constraints.sql
+# 3. A reviewed Terraform apply bootstraps the packaged schema automatically.
 ```

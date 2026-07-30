@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import argparse
 import csv
+import hashlib
 import io
 import json
 from dataclasses import dataclass
@@ -130,6 +131,67 @@ def _write_dataset(
     writer.format(format_name).save(destination)
 
 
+def _list_object_keys(s3_client: Any, bucket: str, prefix: str) -> list[str]:
+    keys: list[str] = []
+    continuation_token: str | None = None
+    while True:
+        kwargs: dict[str, Any] = {"Bucket": bucket, "Prefix": prefix.strip("/") + "/"}
+        if continuation_token:
+            kwargs["ContinuationToken"] = continuation_token
+        response = s3_client.list_objects_v2(**kwargs)
+        keys.extend(item["Key"] for item in response.get("Contents", []))
+        if not response.get("IsTruncated"):
+            return sorted(keys)
+        continuation_token = response["NextContinuationToken"]
+
+
+def _records_checksum(records: list[dict[str, Any]]) -> str:
+    digest = hashlib.sha256()
+    for record in sorted(records, key=lambda item: str(item["customer_id"])):
+        digest.update(f"{record['customer_id']}:{record['sales']};".encode("utf-8"))
+    return digest.hexdigest()
+
+
+def build_serving_batch_manifest(
+    *,
+    batch_id: str,
+    source_manifest_key: str,
+    source_manifest: dict[str, Any],
+    curated_bucket: str,
+    curated_object_keys: list[str],
+    records: list[dict[str, Any]],
+    pipeline_version: str,
+) -> dict[str, Any]:
+    """Build the immutable Phase 3 → Phase 5 hand-off manifest."""
+    return {
+        "phase3_batch_id": batch_id,
+        "source_manifest_key": source_manifest_key,
+        "source_filename": source_manifest["source_filename"],
+        "source_checksum": _records_checksum(records),
+        "curated_bucket": curated_bucket,
+        "curated_object_keys": curated_object_keys,
+        "records_written": len(records),
+        "pipeline_version": pipeline_version,
+    }
+
+
+def _publish_batch_ready(events_client: Any, *, bucket: str, manifest_key: str, batch_id: str) -> None:
+    response = events_client.put_events(
+        Entries=[
+            {
+                "Source": "streamforge.phase3",
+                "DetailType": "Curated Batch Ready",
+                "Detail": json.dumps(
+                    {"bucket": bucket, "manifest_key": manifest_key, "batch_id": batch_id},
+                    sort_keys=True,
+                ),
+            }
+        ]
+    )
+    if response.get("FailedEntryCount", 0):
+        raise RuntimeError(f"Failed to publish curated batch event: {response['Entries']}")
+
+
 def _publish_pipeline_metrics(
     cloudwatch_client: Any, config: JobConfig, stats: dict[str, int]
 ) -> None:
@@ -169,9 +231,14 @@ def run_job(config: JobConfig) -> dict[str, int]:
 
     spark = SparkSession.builder.appName("streamforge-phase3").getOrCreate()
     s3_client = boto3.client("s3")
+    events_client = boto3.client("events")
 
     curated_records: list[dict[str, Any]] = []
     quarantined_records: list[dict[str, Any]] = []
+    ready_batches: list[tuple[str, dict[str, Any]]] = []
+    curated_destination = (
+        f"s3://{config.curated_bucket}/{config.curated_prefix}/".rstrip("/") + "/"
+    )
 
     for manifest_key in _list_manifest_keys(
         s3_client, config.metadata_bucket, config.metadata_prefix
@@ -182,32 +249,57 @@ def run_job(config: JobConfig) -> dict[str, int]:
         ):
             continue
         rows = _read_csv_rows(s3_client, config.input_bucket, manifest["clean_key"])
+        # Reuse the immutable Phase 1 batch identity so a Glue replay cannot
+        # create a second serving-layer batch for the same source object.
+        batch_id = str(manifest["phase1_batch_id"])
+        batch_curated: list[dict[str, Any]] = []
         for row in rows:
             curated, quarantined = transform_record(
                 row,
                 manifest,
                 pipeline_version=config.pipeline_version,
                 date_column=config.date_column,
+                phase3_batch_id=batch_id,
             )
             if curated is not None:
                 curated_records.append(curated)
+                batch_curated.append(curated)
             if quarantined is not None:
                 quarantined_records.append(quarantined)
 
+        if batch_curated:
+            before = set(_list_object_keys(s3_client, config.curated_bucket, config.curated_prefix))
+            _write_dataset(
+                spark,
+                batch_curated,
+                destination=curated_destination,
+                format_name="parquet",
+                mode="append",
+                partition_columns=["year", "month", "day"],
+            )
+            object_keys = sorted(
+                set(_list_object_keys(s3_client, config.curated_bucket, config.curated_prefix)) - before
+            )
+            if not object_keys:
+                raise RuntimeError(f"Phase 3 batch {batch_id} wrote no curated objects")
+            ready_batches.append(
+                (
+                    batch_id,
+                    build_serving_batch_manifest(
+                        batch_id=batch_id,
+                        source_manifest_key=manifest_key,
+                        source_manifest=manifest,
+                        curated_bucket=config.curated_bucket,
+                        curated_object_keys=object_keys,
+                        records=batch_curated,
+                        pipeline_version=config.pipeline_version,
+                    ),
+                )
+            )
+
     total_records = len(curated_records) + len(quarantined_records)
-    curated_destination = (
-        f"s3://{config.curated_bucket}/{config.curated_prefix}/".rstrip("/") + "/"
-    )
     quarantine_destination = (
         f"s3://{config.quarantine_bucket}/{config.quarantine_prefix}/".rstrip("/") + "/"
-    )
-    _write_dataset(
-        spark,
-        curated_records,
-        destination=curated_destination,
-        format_name="parquet",
-        mode="append",
-        partition_columns=["year", "month", "day"],
     )
     _write_dataset(
         spark,
@@ -231,6 +323,21 @@ def run_job(config: JobConfig) -> dict[str, int]:
         raise RuntimeError(
             "Invalid-row threshold exceeded after writing outputs: "
             f"{len(quarantined_records)} of {total_records} rows quarantined"
+        )
+
+    for batch_id, batch_manifest in ready_batches:
+        manifest_key = f"serving/batches/{batch_id}.json"
+        s3_client.put_object(
+            Bucket=config.metadata_bucket,
+            Key=manifest_key,
+            Body=json.dumps(batch_manifest, sort_keys=True).encode("utf-8"),
+            ContentType="application/json",
+        )
+        _publish_batch_ready(
+            events_client,
+            bucket=config.metadata_bucket,
+            manifest_key=manifest_key,
+            batch_id=batch_id,
         )
 
     return stats

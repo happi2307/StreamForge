@@ -45,11 +45,15 @@ class FakeDB:
         self.errors: list[dict] = []
         self.finalized: dict | None = None
         self.failed: dict | None = None
+        self.schema_scripts: list[str] | None = None
         self.committed = False
         self.rolled_back = False
 
     def get_batch_status(self, batch_id):
         return self.existing_status
+
+    def apply_schema(self, scripts):
+        self.schema_scripts = list(scripts)
 
     @contextlib.contextmanager
     def transaction(self):
@@ -225,12 +229,32 @@ def test_get_secret_rejects_empty_secret():
         db.get_secret("db-secret", FakeSecrets())
 
 
+def test_apply_schema_runs_all_scripts_in_one_transaction():
+    class FakeConnection:
+        def __init__(self):
+            self.calls = []
+
+        def run(self, statement):
+            self.calls.append(statement)
+
+    connection = FakeConnection()
+    db.Database(connection).apply_schema(["CREATE SCHEMA a", "CREATE SCHEMA b"])
+    assert connection.calls == ["BEGIN", "CREATE SCHEMA a", "CREATE SCHEMA b", "COMMIT"]
+
+
 # -- handler ----------------------------------------------------------------
 
-def test_handler_extract_source_and_filename():
-    event = {"detail": {"bucket": {"name": "b"}, "object": {"key": "customers/x.parquet"}}}
-    assert handler._extract_source(event) == ("b", "customers/x.parquet")
-    assert handler._source_filename("customers/x.parquet") == "x.parquet"
+def test_handler_extracts_batch_ready_event():
+    event = {
+        "detail": {
+            "bucket": "metadata",
+            "manifest_key": "serving/batches/phase3-batch.json",
+            "batch_id": "phase3-batch",
+        }
+    }
+    assert handler._extract_batch_ready(event) == (
+        "metadata", "serving/batches/phase3-batch.json", "phase3-batch"
+    )
 
 
 def test_handler_loads_object_end_to_end(monkeypatch):
@@ -241,8 +265,18 @@ def test_handler_loads_object_end_to_end(monkeypatch):
         def read(self):
             return b"parquet-bytes"
 
+    manifest = {
+        "phase3_batch_id": "phase3-batch",
+        "source_filename": "customers.csv",
+        "source_checksum": loader.compute_checksum(rows),
+        "curated_bucket": "curated",
+        "curated_object_keys": ["c/x.parquet"],
+    }
+
     class FakeS3:
         def get_object(self, Bucket, Key):  # noqa: N803
+            if Bucket == "metadata":
+                return {"Body": type("Body", (), {"read": lambda self: json.dumps(manifest).encode()})()}
             return {"Body": FakeBody()}
 
     class FakeSNS:
@@ -255,11 +289,31 @@ def test_handler_loads_object_end_to_end(monkeypatch):
     monkeypatch.setattr(handler.db_module, "get_connection", lambda client: object())
     monkeypatch.setattr(handler.db_module, "Database", lambda conn: fake_db)
 
-    event = {"detail": {"bucket": {"name": "curated"}, "object": {"key": "c/x.parquet"}}}
+    event = {
+        "detail": {
+            "bucket": "metadata",
+            "manifest_key": "serving/batches/phase3-batch.json",
+            "batch_id": "phase3-batch",
+        }
+    }
     result = handler.lambda_handler(event, context=None)
 
     assert result["status"] == "SUCCESS"
     assert fake_db.committed
+
+
+def test_handler_bootstraps_schema(monkeypatch):
+    fake_db = FakeDB()
+    clients = {"secretsmanager": object(), "sns": object()}
+    monkeypatch.setattr(handler.boto3, "client", lambda name: clients[name])
+    monkeypatch.setattr(handler.db_module, "get_connection", lambda client: object())
+    monkeypatch.setattr(handler.db_module, "Database", lambda conn: fake_db)
+
+    result = handler.lambda_handler({"action": "bootstrap"}, context=None)
+
+    assert result == {"status": "BOOTSTRAPPED", "scripts_applied": 3}
+    assert fake_db.schema_scripts is not None
+    assert "CREATE SCHEMA IF NOT EXISTS analytics" in fake_db.schema_scripts[0]
 
 
 def test_handler_publishes_sns_on_failure(monkeypatch):
@@ -271,8 +325,18 @@ def test_handler_publishes_sns_on_failure(monkeypatch):
         def read(self):
             return b"parquet-bytes"
 
+    manifest = {
+        "phase3_batch_id": "phase3-batch",
+        "source_filename": "customers.csv",
+        "source_checksum": loader.compute_checksum(rows),
+        "curated_bucket": "curated",
+        "curated_object_keys": ["c/x.parquet"],
+    }
+
     class FakeS3:
         def get_object(self, Bucket, Key):  # noqa: N803
+            if Bucket == "metadata":
+                return {"Body": type("Body", (), {"read": lambda self: json.dumps(manifest).encode()})()}
             return {"Body": FakeBody()}
 
     class FakeSNS:
@@ -286,7 +350,13 @@ def test_handler_publishes_sns_on_failure(monkeypatch):
     monkeypatch.setattr(handler.db_module, "Database", lambda conn: fake_db)
     monkeypatch.setenv("SNS_TOPIC", "arn:aws:sns:us-east-1:1:streamforge-dev-alerts")
 
-    event = {"detail": {"bucket": {"name": "curated"}, "object": {"key": "c/x.parquet"}}}
+    event = {
+        "detail": {
+            "bucket": "metadata",
+            "manifest_key": "serving/batches/phase3-batch.json",
+            "batch_id": "phase3-batch",
+        }
+    }
     with pytest.raises(ValueError):
         handler.lambda_handler(event, context=None)
 
@@ -296,17 +366,18 @@ def test_handler_publishes_sns_on_failure(monkeypatch):
 
 # -- parquet round-trip (only if pyarrow is installed) ----------------------
 
-def test_read_parquet_rows_round_trip():
-    pa = pytest.importorskip("pyarrow")
-    import io
+def test_read_parquet_rows_round_trip(tmp_path):
+    duckdb = pytest.importorskip("duckdb")
+    path = tmp_path / "customers.parquet"
+    connection = duckdb.connect(":memory:")
+    try:
+        connection.execute("CREATE TABLE customers (customer_id VARCHAR, sales INTEGER)")
+        connection.execute("INSERT INTO customers VALUES ('101', 500), ('102', 600)")
+        connection.execute(f"COPY customers TO '{path.as_posix()}' (FORMAT PARQUET)")
+    finally:
+        connection.close()
 
-    import pyarrow.parquet as pq
-
-    table = pa.table({"customer_id": ["101", "102"], "sales": [500, 600]})
-    buffer = io.BytesIO()
-    pq.write_table(table, buffer)
-
-    rows = loader.read_parquet_rows(buffer.getvalue())
+    rows = loader.read_parquet_rows(path.read_bytes())
     assert rows == [
         {"customer_id": "101", "sales": 500},
         {"customer_id": "102", "sales": 600},

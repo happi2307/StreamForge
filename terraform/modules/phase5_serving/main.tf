@@ -7,7 +7,8 @@ data "aws_availability_zones" "available" {
 }
 
 locals {
-  azs = slice(data.aws_availability_zones.available.names, 0, length(var.subnet_cidrs))
+  azs         = slice(data.aws_availability_zones.available.names, 0, length(var.subnet_cidrs))
+  schema_hash = sha256(join("", [for file in ["schema.sql", "indexes.sql", "constraints.sql"] : filesha256("${path.module}/../../../database/${file}")]))
 }
 
 # ---------------------------------------------------------------------------
@@ -19,6 +20,64 @@ resource "aws_vpc" "this" {
   enable_dns_support   = true
   enable_dns_hostnames = true
   tags                 = merge(var.tags, { Name = "${var.name_prefix}-phase5-vpc" })
+}
+
+resource "aws_default_security_group" "this" {
+  vpc_id = aws_vpc.this.id
+  tags   = merge(var.tags, { Name = "${var.name_prefix}-phase5-default" })
+}
+
+data "aws_iam_policy_document" "vpc_flow_logs_assume_role" {
+  statement {
+    effect  = "Allow"
+    actions = ["sts:AssumeRole"]
+    principals {
+      type        = "Service"
+      identifiers = ["vpc-flow-logs.amazonaws.com"]
+    }
+  }
+}
+
+resource "aws_iam_role" "vpc_flow_logs" {
+  name               = "${var.name_prefix}-phase5-vpc-flow-logs"
+  assume_role_policy = data.aws_iam_policy_document.vpc_flow_logs_assume_role.json
+  tags               = var.tags
+}
+
+data "aws_iam_policy_document" "vpc_flow_logs" {
+  statement {
+    effect = "Allow"
+    actions = [
+      "logs:CreateLogStream",
+      "logs:DescribeLogGroups",
+      "logs:DescribeLogStreams",
+      "logs:PutLogEvents",
+    ]
+    resources = ["*"]
+  }
+}
+
+resource "aws_iam_role_policy" "vpc_flow_logs" {
+  name   = "${var.name_prefix}-phase5-vpc-flow-logs"
+  role   = aws_iam_role.vpc_flow_logs.id
+  policy = data.aws_iam_policy_document.vpc_flow_logs.json
+}
+
+resource "aws_cloudwatch_log_group" "vpc_flow_logs" {
+  name              = "/aws/vpc/${var.name_prefix}-phase5"
+  retention_in_days = var.loader_log_retention_days
+  kms_key_id        = var.kms_key_arn
+  tags              = var.tags
+}
+
+resource "aws_flow_log" "this" {
+  iam_role_arn         = aws_iam_role.vpc_flow_logs.arn
+  log_destination      = aws_cloudwatch_log_group.vpc_flow_logs.arn
+  log_destination_type = "cloud-watch-logs"
+  traffic_type         = "ALL"
+  vpc_id               = aws_vpc.this.id
+
+  depends_on = [aws_iam_role_policy.vpc_flow_logs]
 }
 
 resource "aws_subnet" "private" {
@@ -140,7 +199,8 @@ resource "aws_db_subnet_group" "aurora" {
 }
 
 resource "aws_rds_cluster" "this" {
-  #checkov:skip=CKV2_AWS_27:Query logging via Performance Insights/pgaudit is a follow-up hardening item tracked in docs; postgresql logs are already exported.
+  #checkov:skip=CKV2_AWS_27:Query logging via Performance Insights/pgaudit is a follow-up hardening item tracked in docs; PostgreSQL logs are already exported.
+  #checkov:skip=CKV2_AWS_8:Aurora's encrypted seven-day point-in-time recovery avoids duplicate AWS Backup cost in dev.
   cluster_identifier                  = "${var.name_prefix}-phase5"
   engine                              = "aurora-postgresql"
   engine_version                      = var.db_engine_version
@@ -168,6 +228,28 @@ resource "aws_rds_cluster" "this" {
   tags = merge(var.tags, { Name = "${var.name_prefix}-phase5" })
 }
 
+data "aws_iam_policy_document" "rds_monitoring_assume_role" {
+  statement {
+    effect  = "Allow"
+    actions = ["sts:AssumeRole"]
+    principals {
+      type        = "Service"
+      identifiers = ["monitoring.rds.amazonaws.com"]
+    }
+  }
+}
+
+resource "aws_iam_role" "rds_monitoring" {
+  name               = "${var.name_prefix}-phase5-rds-monitoring"
+  assume_role_policy = data.aws_iam_policy_document.rds_monitoring_assume_role.json
+  tags               = var.tags
+}
+
+resource "aws_iam_role_policy_attachment" "rds_monitoring" {
+  role       = aws_iam_role.rds_monitoring.name
+  policy_arn = "arn:aws:iam::aws:policy/service-role/AmazonRDSEnhancedMonitoringRole"
+}
+
 resource "aws_rds_cluster_instance" "this" {
   identifier                      = "${var.name_prefix}-phase5-1"
   cluster_identifier              = aws_rds_cluster.this.id
@@ -176,9 +258,14 @@ resource "aws_rds_cluster_instance" "this" {
   engine_version                  = aws_rds_cluster.this.engine_version
   db_subnet_group_name            = aws_db_subnet_group.aurora.name
   publicly_accessible             = false
+  auto_minor_version_upgrade       = true
+  monitoring_interval             = 60
+  monitoring_role_arn             = aws_iam_role.rds_monitoring.arn
   performance_insights_enabled    = true
   performance_insights_kms_key_id = var.kms_key_arn
   tags                            = var.tags
+
+  depends_on = [aws_iam_role_policy_attachment.rds_monitoring]
 }
 
 # ---------------------------------------------------------------------------
@@ -347,23 +434,34 @@ resource "aws_lambda_function" "loader" {
   }
 }
 
-# ---------------------------------------------------------------------------
-# Trigger — curated Parquet object created -> loader
-# ---------------------------------------------------------------------------
-resource "aws_s3_bucket_notification" "curated_eventbridge" {
-  bucket      = var.curated_bucket_id
-  eventbridge = true
+# Terraform invokes the private loader only after Aurora is ready. The DDL is
+# idempotent, and the script hash re-invokes this initializer after any change.
+resource "aws_lambda_invocation" "schema_bootstrap" {
+  function_name   = aws_lambda_function.loader.function_name
+  lifecycle_scope = "CREATE_ONLY"
+  input = jsonencode({
+    action      = "bootstrap"
+    schema_hash = local.schema_hash
+  })
+  triggers = {
+    schema_hash = local.schema_hash
+  }
+
+  depends_on = [aws_rds_cluster_instance.this]
 }
 
+# ---------------------------------------------------------------------------
+# Trigger — Phase 3 signals only after a complete curated batch is written.
+# ---------------------------------------------------------------------------
 resource "aws_cloudwatch_event_rule" "curated_objects" {
   name        = var.event_rule_name
-  description = "Trigger the Phase 5 loader when curated Parquet is written."
+  description = "Trigger the Phase 5 loader when a curated batch is ready."
   event_pattern = jsonencode({
-    source      = ["aws.s3"]
-    detail-type = ["Object Created"]
+    source      = ["streamforge.phase3"]
+    detail-type = ["Curated Batch Ready"]
     detail = {
-      bucket = { name = [var.curated_bucket_name] }
-      object = { key = [{ suffix = ".parquet" }] }
+      bucket       = [var.metadata_bucket_name]
+      manifest_key = [{ prefix = "serving/batches/" }]
     }
   })
   tags = var.tags

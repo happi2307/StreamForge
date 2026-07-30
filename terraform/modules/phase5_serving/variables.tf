@@ -83,7 +83,7 @@ variable "db_backup_retention_days" {
 variable "db_deletion_protection" {
   description = "Enable deletion protection on the cluster."
   type        = bool
-  default     = false
+  default     = true
 }
 
 variable "db_skip_final_snapshot" {
@@ -110,6 +110,11 @@ variable "curated_bucket_id" {
 
 variable "metadata_bucket_arn" {
   description = "ARN of the Phase 1 metadata bucket the loader may read."
+  type        = string
+}
+
+variable "metadata_bucket_name" {
+  description = "Name of the metadata bucket that stores Phase 3 batch manifests."
   type        = string
 }
 
@@ -196,7 +201,7 @@ variable "loader_reserved_concurrency" {
 variable "loader_log_retention_days" {
   description = "Loader log-group retention in days."
   type        = number
-  default     = 30
+  default     = 365
 }
 
 # -- EventBridge ------------------------------------------------------------

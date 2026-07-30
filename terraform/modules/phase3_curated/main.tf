@@ -55,7 +55,14 @@ data "aws_iam_policy_document" "job_data_access" {
     resources = [
       "${var.curated_bucket_arn}/*",
       "${var.quarantine_bucket_arn}/*",
+      "${var.metadata_bucket_arn}/serving/batches/*",
     ]
+  }
+
+  statement {
+    effect    = "Allow"
+    actions   = ["events:PutEvents"]
+    resources = ["arn:${data.aws_partition.current.partition}:events:${data.aws_region.current.name}:${data.aws_caller_identity.current.account_id}:event-bus/default"]
   }
 
   statement {

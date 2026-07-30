@@ -338,6 +338,7 @@ module "phase5_serving" {
   curated_bucket_name       = module.buckets["curated"].bucket_name
   curated_bucket_arn        = module.buckets["curated"].bucket_arn
   curated_bucket_id         = module.buckets["curated"].bucket_id
+  metadata_bucket_name      = module.buckets["metadata"].bucket_name
   metadata_bucket_arn       = module.buckets["metadata"].bucket_arn
   alert_topic_arn           = module.phase4_operations.alert_topic_arn
   pipeline_metric_namespace = var.pipeline_metric_namespace

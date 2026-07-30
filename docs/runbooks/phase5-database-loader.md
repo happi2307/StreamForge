@@ -30,8 +30,8 @@ One of the Phase 5 alarms enters `ALARM`:
 
 - **Transient failure (Aurora scaling / connection):** the batch rolled back
   cleanly and is marked `FAILED`; no partial data was written. Re-drive it by
-  re-emitting the curated object event (re-put the object, or replay the DLQ
-  message). Idempotency skips any batch already `SUCCESS`.
+  replaying the `Curated Batch Ready` event or its DLQ message. Idempotency
+  skips any batch already `SUCCESS`.
 - **Data failure (validation):** inspect `audit.load_errors`, correct the
   upstream curated data if needed, then replay. Do not hand-edit `analytics`
   tables — the loader is the only writer.

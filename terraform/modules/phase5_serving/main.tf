@@ -380,6 +380,15 @@ resource "aws_cloudwatch_log_group" "lambda" {
   tags              = var.tags
 }
 
+# Upload the loader package to S3 for Lambda deployment (supports up to 250 MiB)
+resource "aws_s3_object" "loader_package" {
+  bucket = var.curated_bucket_name
+  key    = "lambda-packages/database-loader-${filebase64sha256(var.loader_package_path)}.zip"
+  source = var.loader_package_path
+  etag   = filemd5(var.loader_package_path)
+  tags   = var.tags
+}
+
 resource "aws_lambda_function" "loader" {
   #checkov:skip=CKV_AWS_272:Code signing is deferred until CI signs release artifacts; CI builds packages from tracked source and the deployment role is restricted.
   function_name                  = var.loader_function_name
@@ -387,7 +396,8 @@ resource "aws_lambda_function" "loader" {
   role                           = aws_iam_role.lambda.arn
   runtime                        = var.loader_runtime
   handler                        = var.loader_handler
-  filename                       = var.loader_package_path
+  s3_bucket                      = aws_s3_object.loader_package.bucket
+  s3_key                         = aws_s3_object.loader_package.key
   source_code_hash               = filebase64sha256(var.loader_package_path)
   publish                        = false
   timeout                        = var.loader_timeout

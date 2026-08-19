@@ -258,7 +258,7 @@ resource "aws_rds_cluster_instance" "this" {
   engine_version                  = aws_rds_cluster.this.engine_version
   db_subnet_group_name            = aws_db_subnet_group.aurora.name
   publicly_accessible             = false
-  auto_minor_version_upgrade       = true
+  auto_minor_version_upgrade      = true
   monitoring_interval             = 60
   monitoring_role_arn             = aws_iam_role.rds_monitoring.arn
   performance_insights_enabled    = true

@@ -1,4 +1,4 @@
 boto3==1.43.34
 duckdb==1.5.5
 pg8000==1.31.5
-pyarrow==19.0.1
+pyarrow==14.0.2

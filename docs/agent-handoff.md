@@ -126,11 +126,8 @@ substitute for a new plan before making changes:
   subscription for `kumarakshat868@gmail.com`. A labelled manual test message
   was delivered successfully. This validates SNS topic delivery, but each
   CloudWatch alarm path still needs a separate exercise.
-- The account's Lambda regional concurrency quota is exactly 10. The desired
-  configuration reserves five concurrent executions each for the processor and
-  dashboard API Lambdas, but AWS must retain 10 unreserved executions. A quota
-  increase request is open (case `178482111400370`). Until approved, a full
-  Terraform apply will propose these two changes but cannot complete them.
+- Reserved concurrency is applied at five executions each for the processor and
+  dashboard API Lambdas, leaving 990 unreserved executions in the account.
 - A complete dev data-path smoke test passed on 2026-07-25: a four-row CSV
   produced two clean rows, two rejected rows, and a lineage manifest; the
   isolated Phase 3 job then wrote KMS-protected Parquet to the ingestion-date
@@ -139,11 +136,11 @@ substitute for a new plan before making changes:
   Terraform change fixed its missing `logs:AssociateKmsKey` permission and KMS
   log-group encryption contexts.
 - All five CloudWatch metric alarms were exercised through controlled state
-  transitions and restored to `OK`. The Athena failure EventBridge rule was
-  verified with one invocation and zero failed deliveries. The Glue failure
-  rule is enabled with the correct target but remains explicitly unverified:
-  an initialization failure and immediately stopped run did not emit a matched
-  Glue event.
+  transitions and restored to `OK`. The Athena and Glue failure EventBridge
+  rules were verified with one invocation and zero failed deliveries. The Glue
+  test run `jr_3dca0bb9f6c88f5d3c431e6652ba035e3f85d7ae8435909c707c097f447dd4fb`
+  failed normally after its only row was quarantined; its isolated test objects
+  were removed afterward.
 - The repository is public. GitHub `dev` has a required-reviewer protection
   rule for `ashutoshg-2005`, so deployment jobs require an independent approval.
   Production is intentionally not activated because no separate production AWS
@@ -360,7 +357,7 @@ Workflow files live under `.github/workflows/`:
 | `terraform-plan.yml` | Plan for `dev` on relevant pull requests/manual dispatch; requires OIDC environment variables. |
 | `terraform-apply-dev.yml` | Manually dispatched `dev` deployment with literal confirmation and GitHub environment approval. |
 | `terraform-apply-prod.yml` | Manually dispatched production deployment after the separate production approval gate. |
-| `terraform-drift.yml` | Scheduled/manual dev drift detection. |
+| `terraform-drift.yml` | Scheduled/manual, reviewer-gated dev remote-state drift detection. |
 
 The live GitHub `dev` environment contains these backend/authentication variables:
 
@@ -373,7 +370,8 @@ TF_LOCK_TABLE
 ```
 
 It also contains non-secret `TF_VAR_*` values for the deployed bucket-name
-overrides, ownership/cost tags, and KMS configuration. The workflows map the
+overrides, ownership/cost tags, KMS configuration, and operations alert email.
+The workflows map the
 uppercase GitHub variable names to Terraform's case-sensitive lowercase input
 environment variables. Do not replace this with AWS access-key secrets.
 
@@ -468,16 +466,9 @@ S3 lockfiles (`use_lockfile`) rather than making an unreviewed backend change.
 
 ### Needed to finish the platform activation
 
-1. Verify the Glue failure EventBridge rule with an event from a normally
-   running Glue job, then record the delivery evidence in its runbook.
-2. Wait for or obtain a Lambda regional concurrency quota increase, then run a
-   reviewed full dev Terraform apply to set the two five-execution reservations.
-3. Configure an independent reviewer/team as the GitHub `dev` environment
-   protection rule. Do not use the repository owner as a cosmetic approval
-   gate.
-4. Create and validate the independent production environment in its target AWS
+1. Create and validate the independent production environment in its target AWS
    account; do not reuse dev credentials or state.
-5. Run a full AWS smoke test: dashboard upload, EventBridge/Lambda execution,
+2. Run a full AWS smoke test: dashboard upload, EventBridge/Lambda execution,
    clean/rejected/manifest outputs, Glue curated output, Athena query, and
    dashboard downloads.
 

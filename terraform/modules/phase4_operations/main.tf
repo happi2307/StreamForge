@@ -263,7 +263,7 @@ resource "aws_cloudwatch_event_rule" "glue_job_failures" {
   description = "Alert when the Phase 3 Glue job fails, times out, or is stopped."
   event_pattern = jsonencode({
     source      = ["aws.glue"]
-    detail-type = ["Glue Job Run Status"]
+    detail-type = ["Glue Job State Change"]
     detail = {
       jobName = [var.glue_job_name]
       state   = ["FAILED", "TIMEOUT", "STOPPED"]

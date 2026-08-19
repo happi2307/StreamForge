@@ -49,7 +49,8 @@ jobs:
           # syntax requires Resource "*"; the Glue job has an explicit security
           # configuration; only the raw bucket emits ingestion events; CloudFront
           # needs an ACL-enabled log bucket; S3 server-log destinations require
-          # SSE-S3; and DR relies on S3 versioning plus Terraform recovery until
-          # a second-region replica is introduced.
-          skip_check: CKV_AWS_109,CKV_AWS_111,CKV_AWS_356,CKV_AWS_195,CKV2_AWS_62,CKV2_AWS_65,CKV2_AWS_42,CKV2_AWS_47,CKV_AWS_144,CKV_AWS_145
+          # SSE-S3; DR relies on S3 versioning plus Terraform recovery until a
+          # second-region replica is introduced; and dev Aurora uses its encrypted
+          # seven-day point-in-time recovery instead of duplicate AWS Backup.
+          skip_check: CKV_AWS_109,CKV_AWS_111,CKV_AWS_356,CKV_AWS_195,CKV2_AWS_62,CKV2_AWS_65,CKV2_AWS_42,CKV2_AWS_47,CKV_AWS_144,CKV_AWS_145,CKV2_AWS_8
           quiet: true

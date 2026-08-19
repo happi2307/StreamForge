@@ -47,7 +47,9 @@ jobs:
         with:
           python-version: "3.12"
           cache: pip
-      - run: python scripts/package_lambdas.py --environment dev --include-dashboard
+      - run: python scripts/package_lambdas.py --environment dev --include-dashboard --include-loader
       - run: python -m zipfile -t terraform/environments/dev/function.zip
       - run: python -m zipfile -t terraform/environments/dev/dashboard-api.zip
+      - run: python -m zipfile -t terraform/environments/dev/database-loader.zip
       - run: python -c "from pathlib import Path; size = Path('terraform/environments/dev/function.zip').stat().st_size; assert size <= 49 * 1024 * 1024, f'Phase 1 archive is {size} bytes; Lambda direct uploads must stay below 50 MiB'"
+      - run: python -c "from pathlib import Path; size = Path('terraform/environments/dev/database-loader.zip').stat().st_size; assert size <= 49 * 1024 * 1024, f'Phase 5 loader archive is {size} bytes; Lambda direct uploads must stay below 50 MiB'"

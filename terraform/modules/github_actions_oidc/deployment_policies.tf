@@ -177,6 +177,8 @@ data "aws_iam_policy_document" "keys_and_iam" {
     effect = "Allow"
     actions = [
       "iam:AttachRolePolicy",
+      "iam:CreateRole",
+      "iam:DeleteRole",
       "iam:DeleteRolePolicy",
       "iam:DetachRolePolicy",
       "iam:PutRolePolicy",
@@ -437,12 +439,195 @@ data "aws_iam_policy_document" "analytics_and_dashboard" {
   }
 }
 
+data "aws_iam_policy_document" "vpc_and_database" {
+  # ── EC2 / VPC ──────────────────────────────────────────────────────────────
+  statement {
+    sid    = "DescribeEc2GlobalResources"
+    effect = "Allow"
+    actions = [
+      "ec2:DescribeAvailabilityZones",
+      "ec2:DescribeFlowLogs",
+      "ec2:DescribePrefixLists",
+      "ec2:DescribeRouteTables",
+      "ec2:DescribeSecurityGroupRules",
+      "ec2:DescribeSecurityGroups",
+      "ec2:DescribeSubnets",
+      "ec2:DescribeTags",
+      "ec2:DescribeVpcEndpointServices",
+      "ec2:DescribeVpcEndpoints",
+      "ec2:DescribeVpcs",
+    ]
+    resources = ["*"]
+  }
+
+  statement {
+    sid    = "ManagePhase5Vpc"
+    effect = "Allow"
+    actions = [
+      "ec2:AssociateRouteTable",
+      "ec2:AuthorizeSecurityGroupEgress",
+      "ec2:AuthorizeSecurityGroupIngress",
+      "ec2:CreateFlowLogs",
+      "ec2:CreateRouteTable",
+      "ec2:CreateSecurityGroup",
+      "ec2:CreateSubnet",
+      "ec2:CreateTags",
+      "ec2:CreateVpc",
+      "ec2:CreateVpcEndpoint",
+      "ec2:DeleteFlowLogs",
+      "ec2:DeleteRouteTable",
+      "ec2:DeleteSecurityGroup",
+      "ec2:DeleteSubnet",
+      "ec2:DeleteTags",
+      "ec2:DeleteVpc",
+      "ec2:DeleteVpcEndpoints",
+      "ec2:DisassociateRouteTable",
+      "ec2:ModifySubnetAttribute",
+      "ec2:ModifyVpcAttribute",
+      "ec2:ModifyVpcEndpoint",
+      "ec2:RevokeSecurityGroupEgress",
+      "ec2:RevokeSecurityGroupIngress",
+      "ec2:UpdateSecurityGroupRuleDescriptionsEgress",
+      "ec2:UpdateSecurityGroupRuleDescriptionsIngress",
+    ]
+    resources = ["*"]
+    condition {
+      test     = "StringEquals"
+      variable = "aws:RequestedRegion"
+      values   = [data.aws_region.current.name]
+    }
+  }
+
+  # ── RDS / Aurora ───────────────────────────────────────────────────────────
+  statement {
+    sid    = "DescribeRdsGlobalResources"
+    effect = "Allow"
+    actions = [
+      "rds:DescribeDBClusterParameterGroups",
+      "rds:DescribeDBClusterParameters",
+      "rds:DescribeDBEngineVersions",
+      "rds:DescribeDBInstances",
+      "rds:DescribeDBSubnetGroups",
+      "rds:DescribeGlobalClusters",
+    ]
+    resources = ["*"]
+  }
+
+  statement {
+    sid    = "ManagePhase5Aurora"
+    effect = "Allow"
+    actions = [
+      "rds:AddTagsToResource",
+      "rds:CreateDBCluster",
+      "rds:CreateDBInstance",
+      "rds:CreateDBSubnetGroup",
+      "rds:DeleteDBCluster",
+      "rds:DeleteDBInstance",
+      "rds:DeleteDBSubnetGroup",
+      "rds:DescribeDBClusters",
+      "rds:ListTagsForResource",
+      "rds:ModifyDBCluster",
+      "rds:ModifyDBInstance",
+      "rds:ModifyDBSubnetGroup",
+      "rds:RemoveTagsFromResource",
+    ]
+    resources = [
+      "arn:${data.aws_partition.current.partition}:rds:${data.aws_region.current.name}:${data.aws_caller_identity.current.account_id}:cluster:streamforge-*",
+      "arn:${data.aws_partition.current.partition}:rds:${data.aws_region.current.name}:${data.aws_caller_identity.current.account_id}:db:streamforge-*",
+      "arn:${data.aws_partition.current.partition}:rds:${data.aws_region.current.name}:${data.aws_caller_identity.current.account_id}:subgrp:streamforge-*",
+      "arn:${data.aws_partition.current.partition}:rds:${data.aws_region.current.name}:${data.aws_caller_identity.current.account_id}:cluster-pg:streamforge-*",
+    ]
+  }
+
+  # ── Secrets Manager (RDS-managed master secret) ────────────────────────────
+  statement {
+    sid    = "ManageRdsMasterSecret"
+    effect = "Allow"
+    actions = [
+      "secretsmanager:CreateSecret",
+      "secretsmanager:DeleteSecret",
+      "secretsmanager:DescribeSecret",
+      "secretsmanager:GetResourcePolicy",
+      "secretsmanager:GetSecretValue",
+      "secretsmanager:ListSecretVersionIds",
+      "secretsmanager:PutResourcePolicy",
+      "secretsmanager:TagResource",
+      "secretsmanager:UntagResource",
+    ]
+    # RDS-managed secrets use the rds!cluster- prefix; include any streamforge secret.
+    resources = [
+      "arn:${data.aws_partition.current.partition}:secretsmanager:${data.aws_region.current.name}:${data.aws_caller_identity.current.account_id}:secret:rds!cluster-*",
+      "arn:${data.aws_partition.current.partition}:secretsmanager:${data.aws_region.current.name}:${data.aws_caller_identity.current.account_id}:secret:streamforge-*",
+    ]
+  }
+
+  # ── IAM – create/delete the Phase 5 service roles ─────────────────────────
+  statement {
+    sid    = "CreateDeletePhase5ServiceRoles"
+    effect = "Allow"
+    actions = [
+      "iam:CreateRole",
+      "iam:DeleteRole",
+      "iam:GetRole",
+      "iam:PutRolePolicy",
+      "iam:DeleteRolePolicy",
+      "iam:AttachRolePolicy",
+      "iam:DetachRolePolicy",
+      "iam:TagRole",
+      "iam:UntagRole",
+      "iam:ListAttachedRolePolicies",
+      "iam:ListRolePolicies",
+      "iam:GetRolePolicy",
+    ]
+    resources = [
+      "arn:${data.aws_partition.current.partition}:iam::${data.aws_caller_identity.current.account_id}:role/streamforge-*-phase5-*",
+    ]
+  }
+
+  statement {
+    sid     = "PassPhase5ServiceRoles"
+    effect  = "Allow"
+    actions = ["iam:PassRole"]
+    resources = [
+      "arn:${data.aws_partition.current.partition}:iam::${data.aws_caller_identity.current.account_id}:role/streamforge-*-phase5-*",
+    ]
+    condition {
+      test     = "StringEquals"
+      variable = "iam:PassedToService"
+      values = [
+        "lambda.amazonaws.com",
+        "monitoring.rds.amazonaws.com",
+        "vpc-flow-logs.amazonaws.com",
+      ]
+    }
+  }
+
+  # ── CloudWatch log group for VPC flow logs ─────────────────────────────────
+  statement {
+    sid    = "ManagePhase5VpcFlowLogGroup"
+    effect = "Allow"
+    actions = [
+      "logs:AssociateKmsKey",
+      "logs:CreateLogGroup",
+      "logs:DeleteLogGroup",
+      "logs:ListTagsForResource",
+      "logs:PutRetentionPolicy",
+      "logs:TagResource",
+      "logs:UntagResource",
+    ]
+    resources = [
+      "arn:${data.aws_partition.current.partition}:logs:${data.aws_region.current.name}:${data.aws_caller_identity.current.account_id}:log-group:/aws/vpc/streamforge-*",
+    ]
+  }
+}
+
 locals {
   deployment_policy_documents = {
     state-and-storage         = data.aws_iam_policy_document.state_and_storage.json
     keys-and-iam              = data.aws_iam_policy_document.keys_and_iam.json
     runtime-and-observability = data.aws_iam_policy_document.runtime_and_observability.json
     analytics-and-dashboard   = data.aws_iam_policy_document.analytics_and_dashboard.json
+    vpc-and-database          = data.aws_iam_policy_document.vpc_and_database.json
   }
 }
 

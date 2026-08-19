@@ -20,6 +20,8 @@ from zipfile import ZIP_DEFLATED, ZipFile
 
 REPOSITORY_ROOT = Path(__file__).resolve().parents[1]
 PHASE1_SOURCE_FILES = ("handler.py", "metadata.py", "validator.py")
+DATABASE_LOADER_SOURCE_FILES = ("handler.py", "db.py", "loader.py")
+DATABASE_SCHEMA_FILES = ("schema.sql", "indexes.sql", "constraints.sql")
 EXCLUDED_RUNTIME_DIRECTORIES = {"__pycache__", "test", "tests", "testing"}
 EXCLUDED_RUNTIME_SUFFIXES = {".pyc", ".pyo"}
 
@@ -84,6 +86,59 @@ def package_phase1(output_path: Path) -> None:
             )
 
 
+def package_database_loader(output_path: Path) -> None:
+    """Build the Phase 5 loader archive with Linux-compatible pinned deps."""
+    source_directory = REPOSITORY_ROOT / "lambda" / "database_loader"
+    build_directory = REPOSITORY_ROOT / "build"
+    build_directory.mkdir(exist_ok=True)
+    staging_directory = Path(
+        tempfile.mkdtemp(prefix="streamforge-loader-", dir=build_directory)
+    )
+    try:
+        subprocess.run(
+            [
+                sys.executable,
+                "-m",
+                "pip",
+                "install",
+                "--disable-pip-version-check",
+                "--only-binary=:all:",
+                "--platform",
+                "manylinux_2_28_x86_64",
+                "--implementation",
+                "cp",
+                "--python-version",
+                "312",
+                "--target",
+                str(staging_directory),
+                "--requirement",
+                str(source_directory / "requirements.txt"),
+            ],
+            check=True,
+        )
+
+        for filename in DATABASE_LOADER_SOURCE_FILES:
+            shutil.copy2(source_directory / filename, staging_directory / filename)
+        schema_directory = staging_directory / "database"
+        schema_directory.mkdir()
+        for filename in DATABASE_SCHEMA_FILES:
+            shutil.copy2(REPOSITORY_ROOT / "database" / filename, schema_directory / filename)
+
+        temporary_archive = build_directory / f"{output_path.name}.tmp"
+        with ZipFile(temporary_archive, "w", ZIP_DEFLATED) as archive:
+            add_tree(archive, staging_directory)
+        os.replace(temporary_archive, output_path)
+    finally:
+        try:
+            shutil.rmtree(staging_directory)
+        except OSError as error:
+            print(
+                f"Warning: could not remove temporary build directory "
+                f"{staging_directory}: {error}",
+                file=sys.stderr,
+            )
+
+
 def package_dashboard(output_path: Path) -> None:
     """Build the standalone dashboard API archive."""
     with ZipFile(output_path, "w", ZIP_DEFLATED) as archive:
@@ -103,6 +158,11 @@ def main() -> None:
         action="store_true",
         help="Also write dashboard-api.zip for the dev web console.",
     )
+    parser.add_argument(
+        "--include-loader",
+        action="store_true",
+        help="Also write database-loader.zip for the Phase 5 serving layer.",
+    )
     args = parser.parse_args()
 
     output_directory = REPOSITORY_ROOT / "terraform" / "environments" / args.environment
@@ -116,6 +176,11 @@ def main() -> None:
         dashboard_archive = output_directory / "dashboard-api.zip"
         package_dashboard(dashboard_archive)
         print(f"Created {dashboard_archive.relative_to(REPOSITORY_ROOT)}")
+
+    if args.include_loader:
+        loader_archive = output_directory / "database-loader.zip"
+        package_database_loader(loader_archive)
+        print(f"Created {loader_archive.relative_to(REPOSITORY_ROOT)}")
 
 
 if __name__ == "__main__":

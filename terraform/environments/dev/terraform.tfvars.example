@@ -45,3 +45,13 @@ phase3_curated_table_name = "customers_curated"
 # Track B creates the alerting subscription when this optional value is set.
 # The recipient must confirm the subscription email after Terraform applies.
 operations_alert_email = "you@example.com"
+
+# Phase 5 serving layer. Defaults are sensible for a dev demo; override ACU
+# bounds to control Aurora Serverless v2 cost. The loader package is built by
+# scripts/package_lambdas.py --include-loader.
+phase5_db_name             = "streamforge"
+phase5_serverless_min_acu  = 0.5
+phase5_serverless_max_acu  = 4
+phase5_loader_function_name = "streamforge-database-loader"
+phase5_loader_role_name    = "streamforge-database-loader-role"
+phase5_event_rule_name     = "streamforge-curated-loads"

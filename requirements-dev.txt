@@ -1,3 +1,4 @@
 -r lambda/requirements.txt
+-r lambda/database_loader/requirements.txt
 pytest==8.4.2
 pytest-cov==5.0.0

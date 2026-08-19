@@ -381,6 +381,78 @@ variable "dashboard_allowed_origins" {
   default     = ["http://localhost:8000"]
 }
 
+variable "phase5_db_name" {
+  description = "Name of the Aurora database for the Phase 5 serving layer."
+  type        = string
+  default     = "streamforge"
+}
+
+variable "phase5_db_schema" {
+  description = "Primary analytics schema passed to the Phase 5 loader."
+  type        = string
+  default     = "analytics"
+}
+
+variable "phase5_vpc_cidr" {
+  description = "CIDR block for the private Phase 5 VPC."
+  type        = string
+  default     = "10.20.0.0/16"
+}
+
+variable "phase5_subnet_cidrs" {
+  description = "Private subnet CIDRs for the Phase 5 VPC (one per AZ, min two)."
+  type        = list(string)
+  default     = ["10.20.1.0/24", "10.20.2.0/24"]
+}
+
+variable "phase5_serverless_min_acu" {
+  description = "Minimum Aurora Serverless v2 capacity units."
+  type        = number
+  default     = 0.5
+}
+
+variable "phase5_serverless_max_acu" {
+  description = "Maximum Aurora Serverless v2 capacity units."
+  type        = number
+  default     = 4
+}
+
+variable "phase5_loader_function_name" {
+  description = "Name of the Phase 5 database loader Lambda."
+  type        = string
+  default     = "streamforge-database-loader"
+}
+
+variable "phase5_loader_role_name" {
+  description = "Name of the Phase 5 loader IAM role."
+  type        = string
+  default     = "streamforge-database-loader-role"
+}
+
+variable "phase5_loader_inline_policy_name" {
+  description = "Name of the Phase 5 loader inline IAM policy."
+  type        = string
+  default     = "streamforge-phase5-data-access"
+}
+
+variable "phase5_loader_package_path" {
+  description = "Path to the Phase 5 loader deployment ZIP."
+  type        = string
+  default     = "database-loader.zip"
+}
+
+variable "phase5_event_rule_name" {
+  description = "Name of the EventBridge rule for curated object creation."
+  type        = string
+  default     = "streamforge-curated-loads"
+}
+
+variable "phase5_pipeline_version" {
+  description = "Pipeline version stamped onto records loaded in Phase 5."
+  type        = string
+  default     = "5.0.0"
+}
+
 variable "bucket_name_overrides" {
   description = "Optional explicit bucket names keyed by raw, clean, rejected, metadata, curated, quarantine, athena_results."
   type        = map(string)

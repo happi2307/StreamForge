@@ -91,6 +91,39 @@ Phase 4 also includes [CI/CD and promotion guidance](docs/github-environments.md
 [disaster-recovery assumptions](docs/disaster-recovery.md), and a
 [definition of done](docs/definition-of-done.md).
 
+## Phase 5 serving layer
+
+Phase 5 adds an automated relational **serving layer**: curated Parquet is
+loaded into an Amazon Aurora PostgreSQL (Serverless v2) database so dashboards,
+applications, and reporting can query production-ready, indexed, transactional
+tables. After a complete Phase 3 batch is written, Glue creates a batch manifest
+and emits a `Curated Batch Ready` EventBridge event. The database loader reads
+that manifest, verifies its checksum, and runs a staging → validate → MERGE →
+audit workflow inside one transaction, idempotently by batch.
+Terraform packages the idempotent schema scripts with that private loader and
+invokes a bootstrap after Aurora is ready; no public database access or manual
+`psql` setup is required.
+
+Key pieces:
+
+- `database/` — schema, indexes, constraints (schemas `staging`, `analytics`, `audit`).
+- `sql/` — `merge.sql`, `validation.sql`, `audit_queries.sql`.
+- `lambda/database_loader/` — the pg8000/DuckDB loader (`handler`, `loader`, `db`).
+- `terraform/modules/phase5_serving/` — private VPC + endpoints, Aurora
+  Serverless v2, in-VPC loader, IAM, EventBridge, CloudWatch alarms/dashboard,
+  reusing the Phase 4 SNS topic. Wired into `terraform/environments/dev`.
+
+Highlights: idempotent/incremental loading keyed on the batch id, transaction
+rollback with no partial loads, per-record error capture to `audit.load_errors`,
+Secrets Manager credentials, KMS encryption, and structured JSON logging. Build
+the loader archive with `python scripts/package_lambdas.py --environment dev
+--include-loader`.
+
+See the [database architecture](docs/database-architecture.md),
+[ADR 005](docs/adr/005-aurora-serverless-v2-serving-layer.md), and the
+[loader runbook](docs/runbooks/phase5-database-loader.md). SCT/DMS-based
+heterogeneous migration is deferred to Phase 6.
+
 ## Web dashboard
 
 The dashboard provides authenticated CSV upload, processing status, row-level

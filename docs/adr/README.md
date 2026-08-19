@@ -6,3 +6,4 @@ The recorded architecture decisions are:
 - [ADR 002: SSE-KMS encryption](002-sse-kms.md)
 - [ADR 003: Parquet curated data](003-parquet-curated-data.md)
 - [ADR 004: Terraform infrastructure as code](004-terraform-iac.md)
+- [ADR 005: Aurora Serverless v2 serving layer](005-aurora-serverless-v2-serving-layer.md)

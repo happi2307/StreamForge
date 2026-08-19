@@ -82,25 +82,16 @@ def structured_log(logger: logging.Logger, level: int = logging.INFO, **fields: 
 def read_parquet_rows(data: bytes) -> list[dict[str, Any]]:
     """Decode curated Parquet ``data`` into a list of row dicts.
 
-    DuckDB is imported lazily so pure helpers remain importable without the
+    PyArrow is imported lazily so pure helpers remain importable without the
     runtime-only Parquet engine.
     """
-    import duckdb  # local import: runtime-only dependency
+    import pyarrow.parquet as pq
+    import io
 
-    descriptor, path = tempfile.mkstemp(suffix=".parquet")
-    try:
-        with os.fdopen(descriptor, "wb") as file:
-            file.write(data)
-        connection = duckdb.connect(":memory:")
-        try:
-            result = connection.execute("SELECT * FROM read_parquet(?)", [path])
-            columns = [column[0] for column in result.description]
-            return [dict(zip(columns, row)) for row in result.fetchall()]
-        finally:
-            connection.close()
-    finally:
-        with contextlib.suppress(FileNotFoundError):
-            os.unlink(path)
+    buffer = io.BytesIO(data)
+    table = pq.read_table(buffer)
+    # Convert to list of dicts
+    return table.to_pylist()
 
 
 def extract_batch_id(rows: Sequence[Mapping[str, Any]]) -> str:

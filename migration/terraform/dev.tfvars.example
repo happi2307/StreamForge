@@ -1,0 +1,58 @@
+# =====================================================
+# StreamForge Phase 6 - Example Configuration
+# Development Environment Variables
+# =====================================================
+
+# Project Configuration
+project_name = "streamforge"
+environment  = "dev"
+aws_region   = "us-east-1"
+
+# Network Configuration
+vpc_id              = "vpc-0123456789abcdef0"
+private_subnet_ids  = [
+  "subnet-0123456789abcdef0",
+  "subnet-0123456789abcdef1"
+]
+
+# Database Secrets
+oracle_source_secret_arn = "arn:aws:secretsmanager:us-east-1:123456789012:secret:streamforge-dev-oracle-source-abc123"
+aurora_target_secret_arn = "arn:aws:secretsmanager:us-east-1:123456789012:secret:streamforge-dev-aurora-xyz789"
+
+# Aurora Configuration
+aurora_cluster_endpoint = "streamforge-dev-aurora-cluster.cluster-abc123.us-east-1.rds.amazonaws.com"
+
+# Encryption
+kms_key_arn = "arn:aws:kms:us-east-1:123456789012:key/12345678-1234-1234-1234-123456789012"
+
+# Storage
+s3_reports_bucket = "streamforge-dev-migration-reports-123456789012-us-east-1"
+
+# Notifications
+sns_topic_arn = "arn:aws:sns:us-east-1:123456789012:streamforge-dev-alerts"
+
+# DMS Configuration
+replication_instance_class = "dms.t3.medium"
+allocated_storage          = 100
+migration_type             = "full-load-and-cdc"
+enable_multi_az            = false
+auto_start_replication     = false
+
+# Validation Configuration
+enable_validation           = true
+validation_lambda_memory    = 2048
+validation_lambda_timeout   = 900
+
+# Monitoring Configuration
+enable_monitoring_dashboard  = true
+cloudwatch_log_retention_days = 30
+
+# Tags
+tags = {
+  Project     = "StreamForge"
+  Environment = "dev"
+  Phase       = "Phase6-Migration"
+  ManagedBy   = "Terraform"
+  CostCenter  = "Engineering"
+  Owner       = "DataTeam"
+}

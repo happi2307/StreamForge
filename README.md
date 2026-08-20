@@ -7,7 +7,7 @@ for analytics. The platform is provisioned with Terraform, encrypted with
 customer-managed KMS keys, and protected by least-privilege IAM, WAF, private
 S3 origins, CloudWatch monitoring, SNS alerts, and GitHub OIDC.
 
-The project is implemented through four phases:
+The project is implemented through six phases:
 
 1. **Ingestion and quality** — EventBridge-driven Lambda validation, clean and
    rejected outputs, plus a lineage manifest for every upload.
@@ -19,6 +19,12 @@ The project is implemented through four phases:
 4. **Platform engineering** — Terraform, CI/CD, GitHub OIDC, SSE-KMS,
    observability, operational runbooks, dashboard security, and recovery
    guidance.
+5. **Serving layer** — Aurora PostgreSQL Serverless v2 database with automated
+   loading from curated Parquet, idempotent MERGE operations, audit framework,
+   and production-ready indexed transactional tables.
+6. **Enterprise migration** — Heterogeneous database migration from Oracle to
+   Aurora PostgreSQL using AWS SCT and DMS, with full load, CDC, automated
+   validation, and comprehensive monitoring.
 
 ## Architecture
 
@@ -60,6 +66,9 @@ It requires a Cognito user account.
 - AWS Glue Data Catalog
 - AWS Glue Crawler
 - Amazon Athena
+- Amazon Aurora PostgreSQL Serverless v2
+- AWS Database Migration Service (DMS)
+- AWS Schema Conversion Tool (SCT)
 - AWS Key Management Service (KMS)
 - Amazon CloudFront
 - Amazon Cognito
@@ -67,6 +76,7 @@ It requires a Cognito user account.
 - AWS WAF
 - Amazon SNS and Amazon SQS
 - AWS IAM and GitHub Actions OIDC
+- AWS Secrets Manager
 - Terraform
 
 ## Infrastructure, security, and operations
@@ -121,8 +131,39 @@ the loader archive with `python scripts/package_lambdas.py --environment dev
 
 See the [database architecture](docs/database-architecture.md),
 [ADR 005](docs/adr/005-aurora-serverless-v2-serving-layer.md), and the
-[loader runbook](docs/runbooks/phase5-database-loader.md). SCT/DMS-based
-heterogeneous migration is deferred to Phase 6.
+[loader runbook](docs/runbooks/phase5-database-loader.md).
+
+## Phase 6 enterprise migration
+
+Phase 6 implements a complete heterogeneous database migration platform,
+demonstrating Oracle to Aurora PostgreSQL modernization with AWS DMS and SCT.
+An Oracle source database with 10 enterprise tables (CUSTOMERS, ORDERS,
+PRODUCTS, INVENTORY, etc.) is assessed with SCT for schema compatibility,
+converted to PostgreSQL DDL with automatic data type mapping (NUMBER → BIGINT,
+VARCHAR2 → VARCHAR, CLOB → TEXT), and migrated via DMS with full load and
+Change Data Capture. A Lambda-based validation engine verifies row counts,
+primary keys, foreign keys, NULL constraints, and data consistency, generating
+JSON reports stored in S3. The platform includes real-time CDC replication,
+CloudWatch dashboards tracking DMS metrics and CDC latency, EventBridge
+automation, and comprehensive monitoring with alarms for task failures and
+replication lag.
+
+Key pieces:
+
+- `migration/oracle/` — source schema, seed data, PL/SQL procedures.
+- `migration/sct/` — SCT assessment reports and converted PostgreSQL DDL.
+- `migration/dms/` — DMS task configuration, table mappings, task settings.
+- `migration/validation/lambda/` — validation Lambda with comprehensive checks.
+- `migration/terraform/` — DMS infrastructure, validation Lambda, monitoring.
+- `migration/docs/` — schema mapping guide, step-by-step migration guide.
+
+Highlights: full-load-and-cdc migration, automated validation with 45+ checks,
+PL/SQL to PL/pgSQL conversion, CloudWatch dashboard with DMS and CDC metrics,
+EventBridge-driven validation triggers, and production-ready cutover checklist.
+
+See the [migration README](migration/README.md),
+[schema mapping guide](migration/docs/schema-mapping.md), and
+[step-by-step migration guide](migration/docs/migration-guide.md).
 
 ## Web dashboard
 

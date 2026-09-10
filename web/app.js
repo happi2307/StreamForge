@@ -17,7 +17,33 @@ const resultTime = document.querySelector('#result-time');
 const downloadClean = document.querySelector('#download-clean');
 const downloadRejected = document.querySelector('#download-rejected');
 
-function token() { return sessionStorage.getItem('id_token'); }
+const SESSION_EXPIRED = 'Your session expired. Please sign in again.';
+
+// Treat a token that dies within the next 30s as already dead, so a request
+// cannot expire mid-flight.
+const TOKEN_SKEW_MS = 30_000;
+const POLL_TIMEOUT_MS = 5 * 60_000;
+
+function token() {
+  const raw = sessionStorage.getItem('id_token');
+  if (!raw) return null;
+  try {
+    const b64 = raw.split('.')[1].replace(/-/g, '+').replace(/_/g, '/');
+    const { exp } = JSON.parse(atob(b64.padEnd(Math.ceil(b64.length / 4) * 4, '=')));
+    if (!exp || exp * 1000 - TOKEN_SKEW_MS <= Date.now()) return null;
+  } catch {
+    return null; // unparseable token is no token
+  }
+  return raw;
+}
+
+function signOut(reason) {
+  sessionStorage.removeItem('id_token');
+  login.hidden = false;
+  app.hidden = true;
+  result.hidden = true;
+  if (reason) setStatus(reason, 'error');
+}
 
 function base64UrlEncode(bytes) {
   let binary = '';
@@ -78,18 +104,24 @@ async function exchangeCode() {
 }
 
 login.onclick = async () => {
-  const { verifier, challenge } = await createPkcePair();
-  sessionStorage.setItem('pkce_verifier', verifier);
-  const url = new URL(`${config.cognitoDomain}/login`);
-  url.search = new URLSearchParams({
-    client_id: config.clientId,
-    response_type: 'code',
-    scope: 'openid email',
-    redirect_uri: config.redirectUri,
-    code_challenge_method: 'S256',
-    code_challenge: challenge,
-  });
-  location.assign(url);
+  try {
+    const { verifier, challenge } = await createPkcePair();
+    sessionStorage.setItem('pkce_verifier', verifier);
+    const url = new URL(`${config.cognitoDomain}/login`);
+    url.search = new URLSearchParams({
+      client_id: config.clientId,
+      response_type: 'code',
+      scope: 'openid email',
+      redirect_uri: config.redirectUri,
+      code_challenge_method: 'S256',
+      code_challenge: challenge,
+    });
+    location.assign(url);
+  } catch (error) {
+    // crypto.subtle is undefined outside a secure context, so this button
+    // would otherwise appear dead over plain http.
+    setStatus(error instanceof Error ? error.message : 'Could not start sign-in', 'error');
+  }
 };
 
 fileInput.onchange = () => {
@@ -100,9 +132,21 @@ fileInput.onchange = () => {
 };
 
 async function api(path, options = {}) {
-  const response = await fetch(`${config.apiEndpoint}${path}`, { ...options, headers: { ...options.headers, Authorization: `Bearer ${token()}` } });
-  const payload = await response.json();
-  if (!response.ok) throw new Error(payload.message || 'API request failed');
+  const idToken = token();
+  if (!idToken) {
+    signOut(SESSION_EXPIRED);
+    throw new Error(SESSION_EXPIRED);
+  }
+
+  const response = await fetch(`${config.apiEndpoint}${path}`, { ...options, headers: { ...options.headers, Authorization: `Bearer ${idToken}` } });
+  if (response.status === 401 || response.status === 403) {
+    signOut(SESSION_EXPIRED);
+    throw new Error(SESSION_EXPIRED);
+  }
+
+  // Gateway errors and timeouts are not always JSON.
+  const payload = await response.json().catch(() => ({}));
+  if (!response.ok) throw new Error(payload.message || `Request failed (${response.status})`);
   return payload;
 }
 
@@ -129,10 +173,16 @@ uploadButton.onclick = async () => {
     await uploadToS3(upload.upload_url, file);
     setStatus('Validating rows and preparing outputs…');
 
+    const deadline = Date.now() + POLL_TIMEOUT_MS;
     const poll = async () => {
       try {
         const status = await api(`/status?key=${encodeURIComponent(upload.key)}`);
         if (status.status === 'PROCESSING') {
+          if (Date.now() > deadline) {
+            setStatus('Still processing after 5 minutes. Your file was uploaded — check back shortly.', 'error');
+            uploadButton.disabled = false;
+            return;
+          }
           setStatus('Validating rows and preparing outputs…');
           setTimeout(poll, 3000);
           return;

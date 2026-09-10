@@ -43,10 +43,7 @@ data "aws_iam_policy_document" "validation_lambda_permissions" {
       "secretsmanager:GetSecretValue",
       "secretsmanager:DescribeSecret"
     ]
-    resources = [
-      var.oracle_source_secret_arn,
-      var.aurora_target_secret_arn
-    ]
+    resources = [var.aurora_target_secret_arn]
   }
 
   statement {
@@ -144,7 +141,7 @@ data "archive_file" "validation_lambda" {
 
 resource "aws_lambda_function" "validation" {
   function_name    = "${local.name_prefix}-migration-validation"
-  description      = "Validates data integrity after Oracle to PostgreSQL migration"
+  description      = "Validates data integrity of the Aurora PostgreSQL database"
   role             = aws_iam_role.validation_lambda.arn
   handler          = "validation_handler.lambda_handler"
   runtime          = "python3.12"
@@ -161,7 +158,6 @@ resource "aws_lambda_function" "validation" {
   environment {
     variables = {
       AURORA_SECRET_ARN     = var.aurora_target_secret_arn
-      ORACLE_SECRET_ARN     = var.oracle_source_secret_arn
       S3_REPORTS_BUCKET     = var.s3_reports_bucket
       ENVIRONMENT           = var.environment
       LOG_LEVEL             = "INFO"
@@ -193,40 +189,6 @@ resource "aws_cloudwatch_log_group" "validation_lambda" {
   kms_key_id        = var.kms_key_arn
 
   tags = local.common_tags
-}
-
-# =====================================================
-# EventBridge Rule for Migration Complete
-# =====================================================
-
-resource "aws_cloudwatch_event_rule" "migration_complete" {
-  name_prefix = "${local.name_prefix}-migration-complete-"
-  description = "Trigger validation when migration completes"
-
-  event_pattern = jsonencode({
-    source      = ["aws.dms"]
-    detail-type = ["DMS Replication Task State Change"]
-    detail = {
-      eventName = ["DMS-EVENT-0049"] # Task completed
-      replicationTaskArn = [aws_dms_replication_task.main.replication_task_arn]
-    }
-  })
-
-  tags = local.common_tags
-}
-
-resource "aws_cloudwatch_event_target" "validation_lambda" {
-  rule      = aws_cloudwatch_event_rule.migration_complete.name
-  target_id = "ValidationLambda"
-  arn       = aws_lambda_function.validation.arn
-}
-
-resource "aws_lambda_permission" "eventbridge_validation" {
-  statement_id  = "AllowEventBridgeInvoke"
-  action        = "lambda:InvokeFunction"
-  function_name = aws_lambda_function.validation.function_name
-  principal     = "events.amazonaws.com"
-  source_arn    = aws_cloudwatch_event_rule.migration_complete.arn
 }
 
 # =====================================================

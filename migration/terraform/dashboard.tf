@@ -1,6 +1,6 @@
 # =====================================================
 # StreamForge Phase 6 - CloudWatch Dashboard
-# Monitoring for Database Migration
+# Monitoring for Migration Validation
 # =====================================================
 
 resource "aws_cloudwatch_dashboard" "migration" {
@@ -8,143 +8,11 @@ resource "aws_cloudwatch_dashboard" "migration" {
 
   dashboard_body = jsonencode({
     widgets = [
-      # DMS Replication Instance Metrics
-      {
-        type = "metric"
-        x    = 0
-        y    = 0
-        width = 12
-        height = 6
-        properties = {
-          metrics = [
-            ["AWS/DMS", "CPUUtilization", {
-              stat = "Average"
-              dimensions = {
-                ReplicationInstanceIdentifier = aws_dms_replication_instance.main.replication_instance_id
-              }
-            }],
-            [".", "FreeableMemory", {
-              stat = "Average"
-              yAxis = "right"
-            }]
-          ]
-          view    = "timeSeries"
-          stacked = false
-          region  = data.aws_region.current.name
-          title   = "DMS Instance - CPU & Memory"
-          period  = 300
-          yAxis = {
-            left = {
-              label = "CPU %"
-              showUnits = false
-            }
-            right = {
-              label = "Memory (Bytes)"
-              showUnits = false
-            }
-          }
-        }
-      },
-      # DMS Storage
-      {
-        type = "metric"
-        x    = 12
-        y    = 0
-        width = 12
-        height = 6
-        properties = {
-          metrics = [
-            ["AWS/DMS", "FreeStorageSpace", {
-              stat = "Average"
-              dimensions = {
-                ReplicationInstanceIdentifier = aws_dms_replication_instance.main.replication_instance_id
-              }
-            }]
-          ]
-          view    = "timeSeries"
-          stacked = false
-          region  = data.aws_region.current.name
-          title   = "DMS Instance - Storage"
-          period  = 300
-          yAxis = {
-            left = {
-              label = "Storage (Bytes)"
-              showUnits = false
-            }
-          }
-        }
-      },
-      # CDC Metrics
-      {
-        type = "metric"
-        x    = 0
-        y    = 6
-        width = 12
-        height = 6
-        properties = {
-          metrics = [
-            ["AWS/DMS", "CDCLatencySource", {
-              stat = "Average"
-              dimensions = {
-                ReplicationInstanceIdentifier = aws_dms_replication_instance.main.replication_instance_id
-                ReplicationTaskIdentifier     = aws_dms_replication_task.main.replication_task_id
-              }
-            }],
-            [".", "CDCLatencyTarget", {
-              stat = "Average"
-            }]
-          ]
-          view    = "timeSeries"
-          stacked = false
-          region  = data.aws_region.current.name
-          title   = "CDC Latency"
-          period  = 60
-          yAxis = {
-            left = {
-              label = "Latency (seconds)"
-              showUnits = false
-            }
-          }
-        }
-      },
-      # DMS Task Throughput
-      {
-        type = "metric"
-        x    = 12
-        y    = 6
-        width = 12
-        height = 6
-        properties = {
-          metrics = [
-            ["AWS/DMS", "FullLoadThroughputRowsSource", {
-              stat = "Average"
-              dimensions = {
-                ReplicationInstanceIdentifier = aws_dms_replication_instance.main.replication_instance_id
-                ReplicationTaskIdentifier     = aws_dms_replication_task.main.replication_task_id
-              }
-            }],
-            [".", "FullLoadThroughputRowsTarget", {
-              stat = "Average"
-            }]
-          ]
-          view    = "timeSeries"
-          stacked = false
-          region  = data.aws_region.current.name
-          title   = "Full Load Throughput"
-          period  = 60
-          yAxis = {
-            left = {
-              label = "Rows/sec"
-              showUnits = false
-            }
-          }
-        }
-      },
       # Migration Custom Metrics
       {
         type = "metric"
         x    = 0
-        y    = 12
+        y    = 0
         width = 12
         height = 6
         properties = {
@@ -182,7 +50,7 @@ resource "aws_cloudwatch_dashboard" "migration" {
       {
         type = "metric"
         x    = 12
-        y    = 12
+        y    = 0
         width = 12
         height = 6
         properties = {
@@ -223,18 +91,18 @@ resource "aws_cloudwatch_dashboard" "migration" {
       {
         type = "log"
         x    = 0
-        y    = 18
+        y    = 6
         width = 24
         height = 6
         properties = {
           query = <<-EOT
-            SOURCE '${aws_cloudwatch_log_group.dms_task.name}'
+            SOURCE '${aws_cloudwatch_log_group.validation_lambda.name}'
             | fields @timestamp, @message
             | sort @timestamp desc
             | limit 100
           EOT
           region = data.aws_region.current.name
-          title  = "Recent DMS Task Logs"
+          title  = "Recent Validation Lambda Logs"
         }
       }
     ]

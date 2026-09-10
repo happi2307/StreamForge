@@ -15,8 +15,7 @@ private_subnet_ids  = [
   "subnet-0123456789abcdef1"
 ]
 
-# Database Secrets
-oracle_source_secret_arn = "arn:aws:secretsmanager:us-east-1:123456789012:secret:streamforge-dev-oracle-source-abc123"
+# Database Secret
 aurora_target_secret_arn = "arn:aws:secretsmanager:us-east-1:123456789012:secret:streamforge-dev-aurora-xyz789"
 
 # Aurora Configuration
@@ -30,13 +29,6 @@ s3_reports_bucket = "streamforge-dev-migration-reports-123456789012-us-east-1"
 
 # Notifications
 sns_topic_arn = "arn:aws:sns:us-east-1:123456789012:streamforge-dev-alerts"
-
-# DMS Configuration
-replication_instance_class = "dms.t3.medium"
-allocated_storage          = 100
-migration_type             = "full-load-and-cdc"
-enable_multi_az            = false
-auto_start_replication     = false
 
 # Validation Configuration
 enable_validation           = true

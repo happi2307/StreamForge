@@ -1,189 +1,109 @@
 """
-StreamForge Phase 6 - Migration Tests
-Integration tests for database migration validation
+StreamForge Phase 6 - Migration Validation Tests
+
+The handler lives in `validation/lambda/`, which is not importable as a package
+(`lambda` is a Python keyword), so it is loaded by path. boto3 and pg8000 are
+stubbed: these tests cover pure logic, and the handler only touches AWS and the
+database at call time, never at import time.
 """
 
+import importlib.util
+import sys
+import types
 import unittest
-import json
-from validation.lambda.validation_handler import (
-    validate_row_counts,
-    validate_primary_keys,
-    validate_foreign_keys,
-    validate_null_constraints,
-    validate_data_consistency,
-    calculate_checksums,
-    generate_validation_report
-)
+from pathlib import Path
+
+_pg8000 = types.ModuleType("pg8000")
+_pg8000.native = types.SimpleNamespace(Connection=object)
+sys.modules.setdefault("pg8000", _pg8000)
+sys.modules.setdefault("pg8000.native", _pg8000.native)
+
+_boto3 = types.ModuleType("boto3")
+_boto3.client = lambda *a, **kw: None
+sys.modules.setdefault("boto3", _boto3)
+
+_HANDLER = Path(__file__).resolve().parents[1] / "validation" / "lambda" / "validation_handler.py"
+_spec = importlib.util.spec_from_file_location("validation_handler", _HANDLER)
+handler = importlib.util.module_from_spec(_spec)
+_spec.loader.exec_module(handler)
 
 
-class TestValidationFunctions(unittest.TestCase):
-    """Test migration validation functions"""
+class FakeConnection:
+    """Returns a fixed count for every SELECT COUNT(*), or raises."""
 
-    def test_validate_row_counts_pass(self):
-        """Test row count validation when counts match"""
-        # Mock connection would go here
-        # This is a structure test
-        oracle_counts = {
-            'regions': 5,
-            'customers': 8,
-            'products': 10
-        }
+    def __init__(self, count=5, error=None):
+        self.count = count
+        self.error = error
 
-        # In real test, would use mock connection
-        # result = validate_row_counts(mock_conn, oracle_counts)
-        # self.assertEqual(result['status'], 'PASS')
-        pass
-
-    def test_validate_primary_keys_no_duplicates(self):
-        """Test primary key validation with no duplicates"""
-        # Mock connection test
-        pass
-
-    def test_validate_foreign_keys_no_orphans(self):
-        """Test foreign key validation with no orphaned records"""
-        # Mock connection test
-        pass
-
-    def test_generate_validation_report(self):
-        """Test validation report generation"""
-        migration_id = "test-migration-001"
-        validation_results = {
-            'row_counts': {'status': 'PASS'},
-            'primary_keys': {'status': 'PASS'},
-            'foreign_keys': {'status': 'PASS'}
-        }
-
-        report = generate_validation_report(migration_id, validation_results)
-
-        self.assertEqual(report['migration_id'], migration_id)
-        self.assertEqual(report['overall_status'], 'PASS')
-        self.assertIn('validation_timestamp', report)
-        self.assertIn('summary', report)
+    def run(self, query):
+        if self.error:
+            raise RuntimeError(self.error)
+        return [[self.count]]
 
 
-class TestSchemaConversion(unittest.TestCase):
-    """Test Oracle to PostgreSQL schema conversion"""
+class TestValidateRowCounts(unittest.TestCase):
+    def test_counts_every_table(self):
+        result = handler.validate_row_counts(FakeConnection(count=7))
 
-    def test_data_type_mappings(self):
-        """Verify data type conversions"""
-        mappings = {
-            'NUMBER(10)': 'BIGINT',
-            'NUMBER(12,2)': 'NUMERIC(12,2)',
-            'VARCHAR2(100)': 'VARCHAR(100)',
-            'CLOB': 'TEXT',
-            'DATE': 'TIMESTAMP'
-        }
+        self.assertEqual(result["status"], "PASS")
+        self.assertEqual(len(result["tables"]), 10)
+        self.assertEqual(result["tables"]["customers"]["postgresql_count"], 7)
 
-        # Would test actual conversion here
-        self.assertTrue(True)
+    def test_query_failure_is_reported_not_raised(self):
+        result = handler.validate_row_counts(FakeConnection(error="relation does not exist"))
 
-    def test_sequence_conversion(self):
-        """Verify sequence to IDENTITY conversion"""
-        # Test that sequences are properly converted
-        pass
-
-    def test_trigger_conversion(self):
-        """Verify trigger to function conversion"""
-        # Test PL/SQL to PL/pgSQL conversion
-        pass
+        self.assertEqual(result["status"], "ERROR")
+        self.assertEqual(result["tables"]["orders"]["status"], "ERROR")
+        self.assertIn("relation does not exist", result["tables"]["orders"]["error"])
 
 
-class TestDMSConfiguration(unittest.TestCase):
-    """Test DMS configuration files"""
+class TestGenerateValidationReport(unittest.TestCase):
+    def test_all_passing(self):
+        report = handler.generate_validation_report(
+            "test-001",
+            {"row_counts": {"status": "PASS"}, "primary_keys": {"status": "PASS"}},
+        )
 
-    def test_table_mappings_valid_json(self):
-        """Test table mappings JSON is valid"""
-        with open('migration/dms/task_config/table_mappings.json', 'r') as f:
-            mappings = json.load(f)
+        self.assertEqual(report["migration_id"], "test-001")
+        self.assertEqual(report["overall_status"], "PASS")
+        self.assertIn("validation_timestamp", report)
 
-        self.assertIn('rules', mappings)
-        self.assertIsInstance(mappings['rules'], list)
-        self.assertGreater(len(mappings['rules']), 0)
+    def test_one_failure_fails_overall(self):
+        report = handler.generate_validation_report(
+            "test-002",
+            {"row_counts": {"status": "PASS"}, "foreign_keys": {"status": "FAIL"}},
+        )
 
-    def test_task_settings_valid_json(self):
-        """Test task settings JSON is valid"""
-        with open('migration/dms/task_config/task_settings.json', 'r') as f:
-            settings = json.load(f)
+        self.assertEqual(report["overall_status"], "FAIL")
 
-        self.assertIn('TargetMetadata', settings)
-        self.assertIn('FullLoadSettings', settings)
-        self.assertIn('Logging', settings)
-        self.assertIn('ValidationSettings', settings)
+    def test_error_fails_overall(self):
+        report = handler.generate_validation_report(
+            "test-003", {"checksums": {"status": "ERROR"}}
+        )
 
+        self.assertEqual(report["overall_status"], "FAIL")
 
-class TestOracleSchema(unittest.TestCase):
-    """Test Oracle source schema"""
+    def test_summary_counts_individual_checks(self):
+        report = handler.generate_validation_report(
+            "test-004",
+            {
+                "primary_keys": {
+                    "status": "FAIL",
+                    "checks": [
+                        {"status": "PASS"},
+                        {"status": "PASS"},
+                        {"status": "FAIL"},
+                        {"status": "ERROR"},
+                    ],
+                }
+            },
+        )
 
-    def test_schema_sql_syntax(self):
-        """Test Oracle schema SQL is syntactically valid"""
-        # Basic syntax check
-        with open('migration/oracle/schema.sql', 'r') as f:
-            schema = f.read()
-
-        self.assertIn('CREATE TABLE', schema.upper())
-        self.assertIn('PRIMARY KEY', schema.upper())
-        self.assertIn('FOREIGN KEY', schema.upper())
-
-    def test_seed_data_sql_syntax(self):
-        """Test seed data SQL is syntactically valid"""
-        with open('migration/oracle/seed.sql', 'r') as f:
-            seed = f.read()
-
-        self.assertIn('INSERT INTO', seed.upper())
-        self.assertIn('COMMIT', seed.upper())
-
-
-class TestPostgreSQLSchema(unittest.TestCase):
-    """Test PostgreSQL converted schema"""
-
-    def test_converted_schema_syntax(self):
-        """Test converted PostgreSQL schema is syntactically valid"""
-        with open('migration/sct/converted_schema/postgresql_schema.sql', 'r') as f:
-            schema = f.read()
-
-        self.assertIn('CREATE TABLE', schema.upper())
-        self.assertIn('GENERATED BY DEFAULT AS IDENTITY', schema.upper())
-        self.assertIn('PRIMARY KEY', schema.upper())
-
-    def test_converted_procedures_syntax(self):
-        """Test converted procedures are syntactically valid"""
-        with open('migration/sct/converted_schema/postgresql_procedures.sql', 'r') as f:
-            procedures = f.read()
-
-        self.assertIn('CREATE OR REPLACE PROCEDURE', schema.upper())
-        self.assertIn('LANGUAGE plpgsql', procedures)
+        self.assertEqual(report["summary"]["total_checks"], 4)
+        self.assertEqual(report["summary"]["passed_checks"], 2)
+        self.assertEqual(report["summary"]["failed_checks"], 1)
+        self.assertEqual(report["summary"]["errors"], 1)
 
 
-class TestMigrationWorkflow(unittest.TestCase):
-    """Test end-to-end migration workflow"""
-
-    def test_migration_phases(self):
-        """Test migration phase sequence"""
-        phases = [
-            'Assessment',
-            'Schema Conversion',
-            'Deploy Target Schema',
-            'Deploy Infrastructure',
-            'Execute Migration',
-            'Change Data Capture',
-            'Validation'
-        ]
-
-        self.assertEqual(len(phases), 7)
-
-    def test_cutover_checklist(self):
-        """Test cutover checklist completeness"""
-        checklist_items = [
-            'Complete full load migration',
-            'Verify CDC is operational',
-            'Run validation checks',
-            'Test application connectivity',
-            'Document rollback procedure',
-            'Take backups'
-        ]
-
-        self.assertGreater(len(checklist_items), 0)
-
-
-if __name__ == '__main__':
+if __name__ == "__main__":
     unittest.main()

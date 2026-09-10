@@ -1,6 +1,6 @@
 # =====================================================
 # StreamForge Phase 6 - Terraform Variables
-# Configuration for DMS Migration Infrastructure
+# Configuration for migration validation infrastructure
 # =====================================================
 
 variable "project_name" {
@@ -25,18 +25,13 @@ variable "aws_region" {
 }
 
 variable "vpc_id" {
-  description = "VPC ID for DMS and Lambda resources"
+  description = "VPC ID for validation Lambda resources"
   type        = string
 }
 
 variable "private_subnet_ids" {
-  description = "Private subnet IDs for DMS replication instance and Lambda"
+  description = "Private subnet IDs for the validation Lambda"
   type        = list(string)
-}
-
-variable "oracle_source_secret_arn" {
-  description = "Secrets Manager ARN for Oracle source database credentials"
-  type        = string
 }
 
 variable "aurora_target_secret_arn" {
@@ -62,48 +57,6 @@ variable "s3_reports_bucket" {
 variable "sns_topic_arn" {
   description = "SNS topic ARN for notifications"
   type        = string
-}
-
-variable "replication_instance_class" {
-  description = "DMS replication instance class"
-  type        = string
-  default     = "dms.t3.medium"
-  validation {
-    condition     = can(regex("^dms\\.(t3|r5|c5)\\.(micro|small|medium|large|xlarge|2xlarge|4xlarge|8xlarge)$", var.replication_instance_class))
-    error_message = "Invalid DMS instance class."
-  }
-}
-
-variable "allocated_storage" {
-  description = "Storage allocated to DMS replication instance (GB)"
-  type        = number
-  default     = 100
-  validation {
-    condition     = var.allocated_storage >= 50 && var.allocated_storage <= 6144
-    error_message = "Allocated storage must be between 50 and 6144 GB."
-  }
-}
-
-variable "migration_type" {
-  description = "Migration type: full-load, cdc, or full-load-and-cdc"
-  type        = string
-  default     = "full-load-and-cdc"
-  validation {
-    condition     = contains(["full-load", "cdc", "full-load-and-cdc"], var.migration_type)
-    error_message = "Migration type must be full-load, cdc, or full-load-and-cdc."
-  }
-}
-
-variable "enable_multi_az" {
-  description = "Enable Multi-AZ for DMS replication instance"
-  type        = bool
-  default     = false
-}
-
-variable "auto_start_replication" {
-  description = "Automatically start replication task after creation"
-  type        = bool
-  default     = false
 }
 
 variable "validation_lambda_memory" {

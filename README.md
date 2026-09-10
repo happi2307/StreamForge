@@ -2,14 +2,14 @@
 
 **Enterprise Serverless Data Platform**
 
-StreamForge is a comprehensive, production-ready AWS data platform demonstrating the complete spectrum of modern cloud data engineering capabilities. From event-driven CSV ingestion to heterogeneous database migration, StreamForge implements a secure, scalable lakehouse architecture with automated quality validation, business transformations, relational serving, and enterprise modernization.
+StreamForge is a comprehensive, production-ready AWS data platform demonstrating the complete spectrum of modern cloud data engineering capabilities. From event-driven CSV ingestion to a relational serving layer, StreamForge implements a secure, scalable lakehouse architecture with automated quality validation, business transformations, and relational serving.
 
 The platform showcases:
 - **Event-driven data ingestion** with quality gates and lineage tracking
 - **Lakehouse architecture** combining data lake flexibility with warehouse performance
 - **Automated ETL pipelines** with Glue and Lambda
 - **Relational serving layer** with Aurora PostgreSQL Serverless v2
-- **Heterogeneous database migration** from Oracle to PostgreSQL using AWS DMS and SCT
+- **Automated data-integrity validation** against the Aurora PostgreSQL serving layer
 - **Infrastructure as Code** with Terraform and CI/CD automation
 - **Enterprise security** with KMS encryption, least-privilege IAM, and private networking
 - **Comprehensive observability** with CloudWatch dashboards, alarms, and SNS notifications
@@ -29,13 +29,13 @@ The project is implemented through six phases:
 5. **Serving layer** — Aurora PostgreSQL Serverless v2 database with automated
    loading from curated Parquet, idempotent MERGE operations, audit framework,
    and production-ready indexed transactional tables.
-6. **Enterprise migration** — Heterogeneous database migration from Oracle to
-   Aurora PostgreSQL using AWS SCT and DMS, with full load, CDC, automated
-   validation, and comprehensive monitoring.
+6. **Data validation** — An on-demand Lambda that checks row counts, key
+   integrity, null constraints, business invariants, and table checksums
+   against Aurora PostgreSQL, reporting to S3 and CloudWatch.
 
 ## Architecture Overview
 
-StreamForge implements a complete data platform architecture spanning ingestion, transformation, serving, and migration:
+StreamForge implements a complete data platform architecture spanning ingestion, transformation, serving, and validation:
 
 ```text
 ┌─────────────────────────────────────────────────────────────────────┐
@@ -70,20 +70,14 @@ StreamForge implements a complete data platform architecture spanning ingestion,
 │                                                   APIs              │
 └─────────────────────────────────────────────────────────────────────┘
 
-┌───────────── Enterprise Migration (Phase 6) ───────────────────────┐
+┌──────────────── Data Validation (Phase 6) ─────────────────────────┐
 │                                                                     │
-│  Oracle Database → AWS SCT → Schema Conversion                     │
-│         ↓                           ↓                              │
-│    Supplemental             PostgreSQL DDL                         │
-│      Logging                        ↓                              │
-│         ↓                     Deploy to Aurora                     │
-│         ↓                           ↓                              │
-│    AWS DMS Replication ─────────────┘                              │
-│    (Full Load + CDC)                                               │
-│         ↓                                                          │
-│   Validation Lambda → Reports (S3)                                 │
-│         ↓                                                          │
-│   CloudWatch Dashboard                                             │
+│   Aurora PostgreSQL                                                 │
+│         ↓                                                           │
+│   Validation Lambda  (row counts, keys, nulls,                      │
+│         │             invariants, checksums)                        │
+│         ├──────────→ JSON Report (S3)                               │
+│         └──────────→ CloudWatch Metrics → Dashboard + Alarms        │
 └─────────────────────────────────────────────────────────────────────┘
 
 ┌────────── Platform Engineering (Phase 4) ──────────────────────────┐
@@ -108,7 +102,7 @@ See [the architecture document](docs/architecture.md) for more detail.
 | **Phase 3** | Business Curation | ✅ Complete | Glue ETL transformations, Parquet conversion, partitioning, quarantine handling |
 | **Phase 4** | Platform Engineering | ✅ Complete | Terraform IaC, GitHub Actions CI/CD with OIDC, KMS encryption, CloudWatch monitoring, SNS alerts |
 | **Phase 5** | Serving Layer | ✅ Complete | Aurora PostgreSQL Serverless v2, automated Parquet loading, audit framework, idempotent MERGE operations |
-| **Phase 6** | Enterprise Migration | ✅ Complete | Oracle to PostgreSQL migration with AWS DMS, full load + CDC, automated validation, monitoring |
+| **Phase 6** | Data Validation | ✅ Complete | On-demand Aurora PostgreSQL integrity validation with S3 reports, CloudWatch metrics, dashboard and alarms |
 
 ### Key Achievements
 
@@ -133,8 +127,6 @@ It requires a Cognito user account.
 - AWS Glue Crawler
 - Amazon Athena
 - Amazon Aurora PostgreSQL Serverless v2
-- AWS Database Migration Service (DMS)
-- AWS Schema Conversion Tool (SCT)
 - AWS Key Management Service (KMS)
 - Amazon CloudFront
 - Amazon Cognito
@@ -199,37 +191,30 @@ See the [database architecture](docs/database-architecture.md),
 [ADR 005](docs/adr/005-aurora-serverless-v2-serving-layer.md), and the
 [loader runbook](docs/runbooks/phase5-database-loader.md).
 
-## Phase 6 enterprise migration
+## Phase 6 data validation
 
-Phase 6 implements a complete heterogeneous database migration platform,
-demonstrating Oracle to Aurora PostgreSQL modernization with AWS DMS and SCT.
-An Oracle source database with 10 enterprise tables (CUSTOMERS, ORDERS,
-PRODUCTS, INVENTORY, etc.) is assessed with SCT for schema compatibility,
-converted to PostgreSQL DDL with automatic data type mapping (NUMBER → BIGINT,
-VARCHAR2 → VARCHAR, CLOB → TEXT), and migrated via DMS with full load and
-Change Data Capture. A Lambda-based validation engine verifies row counts,
-primary keys, foreign keys, NULL constraints, and data consistency, generating
-JSON reports stored in S3. The platform includes real-time CDC replication,
-CloudWatch dashboards tracking DMS metrics and CDC latency, EventBridge
-automation, and comprehensive monitoring with alarms for task failures and
-replication lag.
+Phase 6 provides automated data-integrity validation for the Aurora PostgreSQL
+serving layer. A Lambda runs six suites of checks across the ten transactional
+tables — row counts, primary key uniqueness, foreign key integrity, NOT NULL
+constraints, business-rule invariants, and per-table checksums — and a single
+failing check fails the whole report. Results are written as JSON to S3 and
+summarised as CloudWatch metrics in the `StreamForge/Migration` namespace,
+feeding a dashboard and alarms for validation errors and long runtimes.
 
 Key pieces:
 
-- `migration/oracle/` — source schema, seed data, PL/SQL procedures.
-- `migration/sct/` — SCT assessment reports and converted PostgreSQL DDL.
-- `migration/dms/` — DMS task configuration, table mappings, task settings.
-- `migration/validation/lambda/` — validation Lambda with comprehensive checks.
-- `migration/terraform/` — DMS infrastructure, validation Lambda, monitoring.
-- `migration/docs/` — schema mapping guide, step-by-step migration guide.
+- `migration/validation/lambda/` — the validation Lambda.
+- `migration/validation/sql/` — the same checks as ad-hoc SQL.
+- `migration/terraform/` — Lambda, IAM, alarms, and CloudWatch dashboard.
+- `migration/tests/` — unit tests for the pure validation logic.
 
-Highlights: full-load-and-cdc migration, automated validation with 45+ checks,
-PL/SQL to PL/pgSQL conversion, CloudWatch dashboard with DMS and CDC metrics,
-EventBridge-driven validation triggers, and production-ready cutover checklist.
+This phase originally implemented an Oracle to Aurora PostgreSQL migration
+using AWS SCT and DMS. The Oracle source, the SCT conversion artifacts, and the
+DMS replication stack have since been decommissioned; the validation suite was
+kept because it stands on its own against Aurora. The Lambda is now invoked on
+demand rather than by a DMS task-completion event.
 
-See the [migration README](migration/README.md),
-[schema mapping guide](migration/docs/schema-mapping.md), and
-[step-by-step migration guide](migration/docs/migration-guide.md).
+See the [migration README](migration/README.md) for invocation and deployment.
 
 ## Web dashboard
 

@@ -1,6 +1,6 @@
 """
 StreamForge Phase 6 - Migration Validation Lambda
-Validates data integrity after Oracle to PostgreSQL migration
+Validates data integrity of the Aurora PostgreSQL database
 """
 
 import json
@@ -15,7 +15,6 @@ import pg8000.native
 AURORA_SECRET_ARN = os.environ.get('AURORA_SECRET_ARN')
 AURORA_CLUSTER_ARN = os.environ.get('AURORA_CLUSTER_ARN')
 S3_REPORTS_BUCKET = os.environ.get('S3_REPORTS_BUCKET')
-ORACLE_SECRET_ARN = os.environ.get('ORACLE_SECRET_ARN', '')
 
 # AWS clients
 secrets_manager = boto3.client('secretsmanager')
@@ -45,9 +44,8 @@ def connect_to_postgres(credentials: Dict[str, str]) -> pg8000.native.Connection
     )
 
 
-def validate_row_counts(conn: pg8000.native.Connection,
-                       oracle_counts: Optional[Dict[str, int]] = None) -> Dict[str, Any]:
-    """Validate row counts match between source and target"""
+def validate_row_counts(conn: pg8000.native.Connection) -> Dict[str, Any]:
+    """Record row counts for every migrated table"""
     tables = [
         'regions', 'customers', 'suppliers', 'products', 'inventory',
         'employees', 'orders', 'order_items', 'payments', 'shipments'
@@ -55,34 +53,16 @@ def validate_row_counts(conn: pg8000.native.Connection,
 
     results = {
         'status': 'PASS',
-        'tables': {},
-        'mismatches': []
+        'tables': {}
     }
 
     for table in tables:
         try:
             query = f"SELECT COUNT(*) FROM {table}"
-            pg_count = conn.run(query)[0][0]
-
-            table_result = {
-                'postgresql_count': pg_count,
-                'oracle_count': oracle_counts.get(table, 'N/A') if oracle_counts else 'N/A',
+            results['tables'][table] = {
+                'postgresql_count': conn.run(query)[0][0],
                 'status': 'PASS'
             }
-
-            # Compare with Oracle count if provided
-            if oracle_counts and table in oracle_counts:
-                if pg_count != oracle_counts[table]:
-                    table_result['status'] = 'FAIL'
-                    results['status'] = 'FAIL'
-                    results['mismatches'].append({
-                        'table': table,
-                        'oracle': oracle_counts[table],
-                        'postgresql': pg_count,
-                        'difference': pg_count - oracle_counts[table]
-                    })
-
-            results['tables'][table] = table_result
 
         except Exception as e:
             results['status'] = 'ERROR'
@@ -416,8 +396,7 @@ def generate_validation_report(migration_id: str, validation_results: Dict[str, 
         'migration_id': migration_id,
         'validation_timestamp': datetime.utcnow().isoformat(),
         'overall_status': overall_status,
-        'source_database': 'Oracle 19c',
-        'target_database': 'Aurora PostgreSQL',
+        'database': 'Aurora PostgreSQL',
         'validation_results': validation_results,
         'summary': {
             'total_checks': sum(
@@ -503,18 +482,12 @@ def lambda_handler(event, context):
 
     Event format:
     {
-        "migration_id": "oracle-prod-001",
-        "oracle_row_counts": {
-            "regions": 5,
-            "customers": 8,
-            ...
-        }
+        "migration_id": "prod-001"
     }
     """
     print(f"Starting migration validation: {json.dumps(event)}")
 
     migration_id = event.get('migration_id', f"migration-{datetime.utcnow().strftime('%Y%m%d%H%M%S')}")
-    oracle_counts = event.get('oracle_row_counts', None)
 
     try:
         # Get PostgreSQL credentials
@@ -525,7 +498,7 @@ def lambda_handler(event, context):
 
         # Run validation checks
         validation_results = {
-            'row_counts': validate_row_counts(conn, oracle_counts),
+            'row_counts': validate_row_counts(conn),
             'primary_keys': validate_primary_keys(conn),
             'foreign_keys': validate_foreign_keys(conn),
             'null_constraints': validate_null_constraints(conn),

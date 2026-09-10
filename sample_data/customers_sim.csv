@@ -1,0 +1,23 @@
+customer_id,name,email,sales,region
+101,Ada Lovelace,ada@example.com,1500,EMEA
+102,Grace Hopper,grace.hopper@navy.mil,2750.50,AMER
+103,Alan Turing,alan+bletchley@example.co.uk,0,EMEA
+104,Katherine Johnson,katherine@nasa.gov,-250,AMER
+105,Jean Bartik,jean@eniac.io,   3200,AMER
+C-106,Radia Perlman,radia@example.net,880,AMER
+107,Jose Alvarez,jose@ejemplo.es,1420,EMEA
+108,Barbara Liskov, barbara@mit.edu ,990,AMER
+109,,missing.name@example.com,500,EMEA
+110,   ,whitespace.name@example.com,500,EMEA
+111,Missing Email,,700,APAC
+112,No At Sign,nobodyexample.com,700,APAC
+113,No Dot In Domain,someone@localhost,700,APAC
+114,Space In Email,bad email@example.com,700,APAC
+115,Double At Sign,two@@example.com,700,APAC
+116,Non Numeric Sales,bad.sales@example.com,N/A,EMEA
+117,Empty Sales,empty.sales@example.com,,EMEA
+118,Comma Formatted Sales,comma@example.com,"1,500",EMEA
+,Missing Customer Id,missing.id@example.com,600,AMER
+101,Ada Lovelace Duplicate,ada.dupe@example.com,1500,EMEA
+201,First Of Pair Has Bad Email,not-an-email,100,APAC
+201,Second Of Pair Is Duplicate,second@example.com,200,APAC

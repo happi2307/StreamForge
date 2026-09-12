@@ -9,7 +9,7 @@ The platform showcases:
 - **Lakehouse architecture** combining data lake flexibility with warehouse performance
 - **Automated ETL pipelines** with Glue and Lambda
 - **Relational serving layer** with Aurora PostgreSQL Serverless v2
-- **Automated data-integrity validation** against the Aurora PostgreSQL serving layer
+- **Enterprise operations portal** covering the lake, warehouse, lineage, analytics and cost
 - **Infrastructure as Code** with Terraform and CI/CD automation
 - **Enterprise security** with KMS encryption, least-privilege IAM, and private networking
 - **Comprehensive observability** with CloudWatch dashboards, alarms, and SNS notifications
@@ -29,9 +29,10 @@ The project is implemented through six phases:
 5. **Serving layer** — Aurora PostgreSQL Serverless v2 database with automated
    loading from curated Parquet, idempotent MERGE operations, audit framework,
    and production-ready indexed transactional tables.
-6. **Data validation** — An on-demand Lambda that checks row counts, key
-   integrity, null constraints, business invariants, and table checksums
-   against Aurora PostgreSQL, reporting to S3 and CloudWatch.
+6. **Enterprise portal** — The upload console extended into a full operations
+   portal: dashboard, data lake explorer, warehouse, analytics, lineage graph,
+   metadata search, monitoring, cost and architecture, so the whole platform can
+   be understood without opening the AWS console.
 
 ## Architecture Overview
 
@@ -70,14 +71,19 @@ StreamForge implements a complete data platform architecture spanning ingestion,
 │                                                   APIs              │
 └─────────────────────────────────────────────────────────────────────┘
 
-┌──────────────── Data Validation (Phase 6) ─────────────────────────┐
+┌─────────────── Enterprise Portal (Phase 6) ────────────────────────┐
 │                                                                     │
-│   Aurora PostgreSQL                                                 │
-│         ↓                                                           │
-│   Validation Lambda  (row counts, keys, nulls,                      │
-│         │             invariants, checksums)                        │
-│         ├──────────→ JSON Report (S3)                               │
-│         └──────────→ CloudWatch Metrics → Dashboard + Alarms        │
+│   CloudFront + WAF → Cognito (PKCE) → API Gateway (JWT)             │
+│                              ↓                                      │
+│                    dashboard_api / portal_api                       │
+│                              ↓                                      │
+│   ┌──────────┬──────────┬──────────┬──────────┬─────────────┐      │
+│   S3 zones   Manifests   Glue/Athena  CloudWatch   Aurora           │
+│   ┌──────────┴──────────┴──────────┴──────────┴─────────────┐      │
+│                              ↓                                      │
+│   12 pages: dashboard, pipeline, upload, lake, warehouse,           │
+│   analytics, lineage, metadata, monitoring, cost, architecture,     │
+│   infrastructure                                                    │
 └─────────────────────────────────────────────────────────────────────┘
 
 ┌────────── Platform Engineering (Phase 4) ──────────────────────────┐
@@ -102,7 +108,7 @@ See [the architecture document](docs/architecture.md) for more detail.
 | **Phase 3** | Business Curation | ✅ Complete | Glue ETL transformations, Parquet conversion, partitioning, quarantine handling |
 | **Phase 4** | Platform Engineering | ✅ Complete | Terraform IaC, GitHub Actions CI/CD with OIDC, KMS encryption, CloudWatch monitoring, SNS alerts |
 | **Phase 5** | Serving Layer | ✅ Complete | Aurora PostgreSQL Serverless v2, automated Parquet loading, audit framework, idempotent MERGE operations |
-| **Phase 6** | Data Validation | ✅ Complete | On-demand Aurora PostgreSQL integrity validation with S3 reports, CloudWatch metrics, dashboard and alarms |
+| **Phase 6** | Enterprise Portal | ✅ Complete | Twelve-page operations portal over the live platform: lake explorer, warehouse, analytics, lineage, metadata, monitoring, cost and architecture |
 
 ### Key Achievements
 
@@ -191,30 +197,65 @@ See the [database architecture](docs/database-architecture.md),
 [ADR 005](docs/adr/005-aurora-serverless-v2-serving-layer.md), and the
 [loader runbook](docs/runbooks/phase5-database-loader.md).
 
-## Phase 6 data validation
+## Phase 6 enterprise portal
 
-Phase 6 provides automated data-integrity validation for the Aurora PostgreSQL
-serving layer. A Lambda runs six suites of checks across the ten transactional
-tables — row counts, primary key uniqueness, foreign key integrity, NOT NULL
-constraints, business-rule invariants, and per-table checksums — and a single
-failing check fails the whole report. Results are written as JSON to S3 and
-summarised as CloudWatch metrics in the `StreamForge/Migration` namespace,
-feeding a dashboard and alarms for validation errors and long runtimes.
+Phase 6 turns the CSV upload console into the portal that demonstrates the whole
+platform without opening the AWS console. The upload page is unchanged; a
+sidebar and hash router were added around it, and eleven further pages were
+built alongside.
 
-Key pieces:
+| Page | What it shows |
+| --- | --- |
+| Dashboard | Platform totals and daily processing, from the lineage manifests |
+| Pipeline | Component health and the most recent batches |
+| Upload | The original console, plus a processing timeline |
+| Data Lake | All seven S3 zones, browsable to the object, with partitions |
+| Warehouse | Aurora schemas, tables and columns via the RDS Data API |
+| Analytics | Revenue, categories and top customers, via Athena over curated Parquet |
+| Lineage | Interactive graph; selecting a stage shows its inputs, outputs and rules |
+| Metadata | Searchable, filterable, paginated view of every batch manifest |
+| Monitoring | CloudWatch Lambda metrics and alarm state |
+| Cost | Measured spend by service, and what each future decision would add |
+| Architecture | Six zoomable diagrams: platform, lake, serving, CI/CD, security, monitoring |
+| Infrastructure | Each service mapped to the Terraform module that creates it |
 
-- `migration/validation/lambda/` — the validation Lambda.
-- `migration/validation/sql/` — the same checks as ad-hoc SQL.
-- `migration/terraform/` — Lambda, IAM, alarms, and CloudWatch dashboard.
-- `migration/tests/` — unit tests for the pure validation logic.
+### Structure
 
-This phase originally implemented an Oracle to Aurora PostgreSQL migration
-using AWS SCT and DMS. The Oracle source, the SCT conversion artifacts, and the
-DMS replication stack have since been decommissioned; the validation suite was
-kept because it stands on its own against Aurora. The Lambda is now invoked on
-demand rather than by a DMS task-completion event.
+- `web/router.js` — hash router; each page is a lazily imported module
+- `web/pages/*.js` — one module per page
+- `web/api.js` — fetch wrapper reusing the session handling in `app.js`
+- `web/ui.js` — DOM builders, tables, states, formatters
+- `web/charts.js` — hand-built SVG charts
+- `web/flow.js` — layered flow diagrams for Architecture and Lineage
+- `portal_api.py` — the read-only `GET /api/*` handlers
+- `dashboard_api.py` — unchanged upload path, delegating portal routes
 
-See the [migration README](migration/README.md) for invocation and deployment.
+### Constraints worth knowing
+
+The CloudFront CSP is `default-src 'self'`, which rules out a CDN chart library
+and every form of inline script or style. Charts are therefore hand-built SVG
+and diagrams are DOM, all constructed with `createElement`. There is no build
+step and no `node_modules`.
+
+Chart colours were validated rather than chosen. Green and red for valid versus
+rejected scores ΔE 2.5 under deuteranopia — indistinguishable — so the shipped
+pair scores 17.3 instead. The palettes and the command to re-check them are
+documented at the top of `web/charts.js`.
+
+Pages report honestly when a dependency is missing: the Warehouse page states
+that Phase 5 is not deployed rather than showing an invented schema, and the
+lineage graph labels object counts as objects rather than records.
+
+### Running it locally
+
+`scripts/local_server.py` serves the portal against `local_buckets/` with no
+AWS account, by running the real `portal_api` handlers over a local S3 shim.
+Endpoints that genuinely need AWS — CloudWatch, Athena, Aurora — report as
+unavailable rather than returning fabricated data.
+
+```bash
+python scripts/local_server.py     # http://localhost:8000
+```
 
 ## Web dashboard
 

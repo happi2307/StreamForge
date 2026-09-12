@@ -42,3 +42,13 @@ output "dashboard_name" {
   description = "Name of the Phase 5 CloudWatch dashboard."
   value       = aws_cloudwatch_dashboard.phase5.dashboard_name
 }
+
+output "cluster_arn" {
+  description = "Aurora cluster ARN, used by RDS Data API callers such as the portal."
+  value       = aws_rds_cluster.this.arn
+}
+
+output "private_subnet_ids" {
+  description = "Private subnet IDs, for workloads that must run inside the serving VPC."
+  value       = aws_subnet.private[*].id
+}

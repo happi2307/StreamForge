@@ -57,15 +57,27 @@ variable "db_master_username" {
 }
 
 variable "db_engine_version" {
-  description = "Aurora PostgreSQL engine version."
+  description = "Aurora PostgreSQL engine version. Scale-to-zero needs 16.3 or newer."
   type        = string
-  default     = "16.4"
+  default     = "16.6"
 }
 
 variable "serverless_min_acu" {
-  description = "Minimum Aurora Serverless v2 capacity units."
+  description = "Minimum Aurora Serverless v2 capacity units. 0 enables scale-to-zero, which requires engine 16.3+ and keeps an idle cluster near free."
   type        = number
-  default     = 0.5
+  default     = 0
+}
+
+variable "seconds_until_auto_pause" {
+  description = "Idle seconds before a min_capacity 0 cluster pauses. Ignored unless serverless_min_acu is 0."
+  type        = number
+  default     = 300
+}
+
+variable "enable_data_api" {
+  description = "Expose the RDS Data API so callers can query without VPC access."
+  type        = bool
+  default     = true
 }
 
 variable "serverless_max_acu" {

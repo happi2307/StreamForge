@@ -122,3 +122,18 @@ output "github_actions_oidc_provider_arn" {
   description = "GitHub Actions OIDC provider ARN for the development AWS account."
   value       = module.github_actions_oidc.oidc_provider_arn
 }
+
+output "phase5_cluster_arn" {
+  description = "Aurora cluster ARN for RDS Data API callers."
+  value       = module.phase5_serving.cluster_arn
+}
+
+output "phase5_vpc_id" {
+  description = "VPC that hosts the serving layer."
+  value       = module.phase5_serving.vpc_id
+}
+
+output "phase5_private_subnet_ids" {
+  description = "Private subnets in the serving VPC."
+  value       = module.phase5_serving.private_subnet_ids
+}

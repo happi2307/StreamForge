@@ -37,6 +37,81 @@ data "aws_iam_policy_document" "lambda_access" {
     actions   = ["kms:Decrypt", "kms:Encrypt", "kms:GenerateDataKey", "kms:DescribeKey"]
     resources = [var.kms_key_arn]
   }
+
+  # -- Read-only access for the portal pages --------------------------------
+
+  statement {
+    sid       = "PortalListLakeZones"
+    actions   = ["s3:ListBucket", "s3:GetBucketLocation"]
+    resources = [for bucket in var.lake_buckets : bucket.arn]
+  }
+
+  statement {
+    sid       = "PortalReadManifests"
+    actions   = ["s3:GetObject"]
+    resources = ["${var.metadata_bucket_arn}/*"]
+  }
+
+  statement {
+    sid       = "PortalBucketConfiguration"
+    actions   = ["s3:GetEncryptionConfiguration", "s3:GetLifecycleConfiguration"]
+    resources = [for bucket in var.lake_buckets : bucket.arn]
+  }
+
+  statement {
+    sid       = "PortalCatalogRead"
+    actions   = ["glue:GetDatabase", "glue:GetDatabases", "glue:GetTable", "glue:GetTables", "glue:GetPartitions"]
+    resources = ["*"]
+  }
+
+  statement {
+    sid = "PortalAthenaQueries"
+    actions = [
+      "athena:StartQueryExecution",
+      "athena:GetQueryExecution",
+      "athena:GetQueryResults",
+    ]
+    resources = ["*"]
+  }
+
+  # Athena writes results to its workgroup bucket and reads the curated data.
+  statement {
+    sid       = "PortalAthenaResults"
+    actions   = ["s3:PutObject", "s3:GetObject", "s3:AbortMultipartUpload"]
+    resources = [for key, bucket in var.lake_buckets : "${bucket.arn}/*" if contains(["curated", "athena_results"], key)]
+  }
+
+  statement {
+    sid       = "PortalCloudWatchRead"
+    actions   = ["cloudwatch:GetMetricData", "cloudwatch:DescribeAlarms", "cloudwatch:ListMetrics"]
+    resources = ["*"]
+  }
+}
+
+# Aurora access is only granted when Phase 5 is deployed, so the portal role
+# stays minimal in environments without a serving layer.
+data "aws_iam_policy_document" "aurora_access" {
+  count = var.aurora_cluster_arn == "" ? 0 : 1
+
+  statement {
+    sid       = "PortalWarehouseRead"
+    actions   = ["rds-data:ExecuteStatement", "rds-data:BatchExecuteStatement"]
+    resources = [var.aurora_cluster_arn]
+  }
+
+  statement {
+    sid       = "PortalWarehouseSecret"
+    actions   = ["secretsmanager:GetSecretValue"]
+    resources = [var.aurora_secret_arn]
+  }
+}
+
+resource "aws_iam_role_policy" "aurora_access" {
+  count = var.aurora_cluster_arn == "" ? 0 : 1
+
+  name_prefix = "portal-warehouse-"
+  role        = aws_iam_role.lambda.id
+  policy      = data.aws_iam_policy_document.aurora_access[0].json
 }
 
 resource "aws_iam_role" "lambda" {
@@ -95,11 +170,27 @@ resource "aws_lambda_function" "api" {
   }
 
   environment {
-    variables = {
-      RAW_BUCKET      = var.raw_bucket_name
-      METADATA_BUCKET = var.metadata_bucket_name
-      METADATA_PREFIX = var.metadata_prefix
-    }
+    # Portal values are merged in so an environment without Phase 5, Glue or
+    # Athena simply omits them and the affected pages report "not configured".
+    variables = merge(
+      {
+        RAW_BUCKET      = var.raw_bucket_name
+        METADATA_BUCKET = var.metadata_bucket_name
+        METADATA_PREFIX = var.metadata_prefix
+      },
+      { for zone, bucket in var.lake_buckets : "${upper(replace(zone, "-", "_"))}_BUCKET" => bucket.name },
+      { for key, value in {
+        GLUE_DATABASE           = var.glue_database
+        ATHENA_WORKGROUP        = var.athena_workgroup
+        CURATED_TABLE           = var.curated_table
+        GLUE_JOB_NAME           = var.glue_job_name
+        PROCESSOR_FUNCTION_NAME = var.processor_function_name
+        DASHBOARD_FUNCTION_NAME = var.lambda_function_name
+        AURORA_CLUSTER_ARN      = var.aurora_cluster_arn
+        AURORA_SECRET_ARN       = var.aurora_secret_arn
+        AURORA_DATABASE         = var.aurora_database
+      } : key => value if value != "" },
+    )
   }
 
   tags = var.tags
@@ -186,6 +277,27 @@ resource "aws_apigatewayv2_route" "uploads" {
 resource "aws_apigatewayv2_route" "status" {
   api_id             = aws_apigatewayv2_api.this.id
   route_key          = "GET /status"
+  target             = "integrations/${aws_apigatewayv2_integration.lambda.id}"
+  authorization_type = "JWT"
+  authorizer_id      = aws_apigatewayv2_authorizer.cognito.id
+}
+
+# Read-only portal endpoints, served by portal_api.py. Same JWT authorizer as
+# the upload routes -- none of these are public.
+resource "aws_apigatewayv2_route" "portal" {
+  for_each = toset([
+    "dashboard",
+    "storage",
+    "metadata",
+    "lineage",
+    "metrics",
+    "pipeline",
+    "analytics",
+    "warehouse",
+  ])
+
+  api_id             = aws_apigatewayv2_api.this.id
+  route_key          = "GET /api/${each.value}"
   target             = "integrations/${aws_apigatewayv2_integration.lambda.id}"
   authorization_type = "JWT"
   authorizer_id      = aws_apigatewayv2_authorizer.cognito.id

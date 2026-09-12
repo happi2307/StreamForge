@@ -369,7 +369,24 @@ module "web_console" {
   metadata_prefix      = var.metadata_prefix
   kms_key_arn          = module.kms.key_arn
   allowed_origins      = concat(var.dashboard_allowed_origins, [module.web_static.dashboard_origin])
-  tags                 = merge(local.common_tags, { Service = "web-console" })
+
+  # Phase 6 portal: read-only access to every lake zone and the catalog.
+  lake_buckets = {
+    for zone, bucket in module.buckets : zone => {
+      name = bucket.bucket_name
+      arn  = bucket.bucket_arn
+    }
+  }
+  glue_database           = module.phase2_analytics.glue_database_name
+  athena_workgroup        = var.phase3_athena_workgroup_name
+  curated_table           = var.phase3_curated_table_name
+  glue_job_name           = var.phase3_glue_job_name
+  processor_function_name = var.lambda_function_name
+  aurora_cluster_arn      = module.phase5_serving.cluster_arn
+  aurora_secret_arn       = module.phase5_serving.database_secret_arn
+  aurora_database         = var.phase5_db_name
+
+  tags = merge(local.common_tags, { Service = "web-console" })
 }
 
 module "github_actions_oidc" {

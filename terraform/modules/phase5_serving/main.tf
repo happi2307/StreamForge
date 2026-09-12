@@ -220,9 +220,17 @@ resource "aws_rds_cluster" "this" {
   skip_final_snapshot                 = var.db_skip_final_snapshot
   final_snapshot_identifier           = var.db_skip_final_snapshot ? null : "${var.name_prefix}-phase5-final"
 
+  # The Data API lets callers (the portal, ad-hoc queries) reach Aurora over IAM
+  # without sitting inside the VPC, which avoids needing interface endpoints
+  # for a read-only path.
+  enable_http_endpoint = var.enable_data_api
+
   serverlessv2_scaling_configuration {
     min_capacity = var.serverless_min_acu
     max_capacity = var.serverless_max_acu
+    # min_capacity 0 lets the cluster pause entirely when idle. Without this the
+    # floor of 0.5 ACU bills continuously, about $45/month for an idle demo.
+    seconds_until_auto_pause = var.serverless_min_acu == 0 ? var.seconds_until_auto_pause : null
   }
 
   tags = merge(var.tags, { Name = "${var.name_prefix}-phase5" })

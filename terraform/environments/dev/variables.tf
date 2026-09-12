@@ -406,9 +406,9 @@ variable "phase5_subnet_cidrs" {
 }
 
 variable "phase5_serverless_min_acu" {
-  description = "Minimum Aurora Serverless v2 capacity units."
+  description = "Minimum Aurora Serverless v2 capacity units. 0 lets an idle cluster pause, which is the difference between roughly $1 and $45 a month."
   type        = number
-  default     = 0.5
+  default     = 0
 }
 
 variable "phase5_serverless_max_acu" {

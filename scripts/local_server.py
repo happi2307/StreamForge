@@ -19,10 +19,14 @@ from __future__ import annotations
 
 import base64
 import importlib
+import io
 import json
+import os
 import re
 import sys
 import time
+import types
+from datetime import datetime, timezone
 from http.server import SimpleHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 from urllib.parse import parse_qs, urlparse
@@ -33,10 +37,129 @@ sys.path.insert(0, str(ROOT))
 run_local = importlib.import_module("scripts.run_local")
 metadata = importlib.import_module("lambda.metadata")
 
+
+def _install_aws_stubs() -> None:
+    """Let portal_api import without boto3 installed.
+
+    The portal endpoints are reused verbatim so local testing exercises the real
+    backend logic; only the S3 client underneath is swapped for local folders.
+    Anything that genuinely needs AWS is reported as unavailable rather than
+    faked, so a local pass never implies a deployed one.
+    """
+    if "boto3" not in sys.modules:
+        boto3_stub = types.ModuleType("boto3")
+        boto3_stub.client = lambda service, *a, **kw: _AwsUnavailable(service)
+        sys.modules["boto3"] = boto3_stub
+
+    if "botocore.exceptions" not in sys.modules:
+        botocore = sys.modules.setdefault("botocore", types.ModuleType("botocore"))
+        exceptions = types.ModuleType("botocore.exceptions")
+
+        class ClientError(Exception):
+            def __init__(self, response=None, operation_name=""):
+                super().__init__(operation_name)
+                self.response = response or {"Error": {"Code": "LocalStub"}}
+
+        exceptions.ClientError = ClientError
+        botocore.exceptions = exceptions
+        sys.modules["botocore.exceptions"] = exceptions
+
+
+class _AwsUnavailable:
+    """Stands in for an AWS client that has no local equivalent."""
+
+    def __init__(self, service: str):
+        self.service = service
+
+    def __getattr__(self, name):
+        def fail(*_args, **_kwargs):
+            raise RuntimeError(
+                f"{self.service}:{name} needs real AWS; this endpoint is unavailable locally."
+            )
+        return fail
+
+
+_install_aws_stubs()
+portal_api = importlib.import_module("portal_api")
+
 WEB = ROOT / "web"
 # Mirrors dashboard_api.MAX_UPLOAD_BYTES. Duplicated rather than imported
 # because dashboard_api pulls in boto3, which local runs do not need.
 MAX_UPLOAD_BYTES = 10 * 1024 * 1024
+
+
+class LocalS3:
+    """The slice of the S3 API that portal_api actually uses, over local folders.
+
+    Bucket names are the folder names under local_buckets/.
+    """
+
+    def __init__(self, root: Path):
+        self.root = root
+
+    def _bucket_dir(self, bucket: str) -> Path:
+        return self.root / bucket
+
+    def get_paginator(self, operation: str):
+        if operation != "list_objects_v2":
+            raise RuntimeError(f"LocalS3 does not implement {operation}")
+        return _LocalPaginator(self)
+
+    def list_objects(self, bucket: str, prefix: str = ""):
+        base = self._bucket_dir(bucket)
+        if not base.is_dir():
+            return []
+        contents = []
+        for path in sorted(base.rglob("*")):
+            if not path.is_file():
+                continue
+            key = path.relative_to(base).as_posix()
+            if prefix and not key.startswith(prefix):
+                continue
+            stat = path.stat()
+            contents.append(
+                {
+                    "Key": key,
+                    "Size": stat.st_size,
+                    "LastModified": datetime.fromtimestamp(stat.st_mtime, tz=timezone.utc),
+                    "StorageClass": "STANDARD",
+                }
+            )
+        return contents
+
+    def get_object(self, Bucket: str, Key: str):  # noqa: N803 - matches boto3
+        path = self._bucket_dir(Bucket) / Key
+        if not path.is_file():
+            raise _client_error("NoSuchKey", "GetObject")
+        return {"Body": io.BytesIO(path.read_bytes())}
+
+    def get_bucket_encryption(self, Bucket: str):  # noqa: N803
+        # Local folders have no encryption; say so rather than claiming SSE-KMS.
+        raise _client_error("ServerSideEncryptionConfigurationNotFoundError", "GetBucketEncryption")
+
+    def get_bucket_lifecycle_configuration(self, Bucket: str):  # noqa: N803
+        raise _client_error("NoSuchLifecycleConfiguration", "GetBucketLifecycleConfiguration")
+
+
+class _LocalPaginator:
+    def __init__(self, client: LocalS3):
+        self.client = client
+
+    def paginate(self, Bucket: str, Prefix: str = "", **_kwargs):  # noqa: N803
+        yield {"Contents": self.client.list_objects(Bucket, Prefix)}
+
+
+def _client_error(code: str, operation: str):
+    from botocore.exceptions import ClientError  # resolved via the stub above
+
+    return ClientError({"Error": {"Code": code}}, operation)
+
+
+def configure_portal_env() -> None:
+    """Point portal_api at the local buckets."""
+    os.environ.setdefault("METADATA_PREFIX", "metadata")
+    for zone, variable in portal_api.ZONES:
+        os.environ.setdefault(variable, zone.replace("_", "-"))
 
 
 def b64url(raw: bytes) -> str:
@@ -109,6 +232,10 @@ class Handler(SimpleHTTPRequestHandler):
 
         if route.path == "/download":
             self.handle_download(query.get("path", [""])[0])
+            return
+
+        if route.path.startswith("/api/"):
+            self.handle_portal(f"GET {route.path}", query)
             return
 
         super().do_GET()
@@ -197,6 +324,24 @@ class Handler(SimpleHTTPRequestHandler):
             },
         )
 
+    def handle_portal(self, route_key: str, query: dict) -> None:
+        """Run the real portal_api handler against the local buckets."""
+        if not portal_api.handles(route_key):
+            self.send_json(404, {"message": "Route not found"})
+            return
+
+        # portal_api caches per process; drop it so local edits show up at once.
+        portal_api._CACHE.clear()
+
+        event = {"queryStringParameters": {k: v[0] for k, v in query.items()}}
+        try:
+            self.send_json(200, portal_api.handle(route_key, event, LocalS3(run_local.BUCKETS)))
+        except ValueError as exc:
+            self.send_json(400, {"message": str(exc)})
+        except RuntimeError as exc:
+            # Endpoints that genuinely need AWS (CloudWatch, Athena, Aurora).
+            self.send_json(502, {"message": str(exc)})
+
     def manifest_path(self, key: str) -> Path:
         return run_local.MANIFESTS / Path(metadata.build_manifest_key(key))
 
@@ -251,6 +396,7 @@ class Handler(SimpleHTTPRequestHandler):
 
 def main(argv: list[str]) -> int:
     port = int(argv[0]) if argv else 8000
+    configure_portal_env()
     server = ThreadingHTTPServer(("127.0.0.1", port), Handler)
     print(f"StreamForge local dashboard: http://localhost:{port}")
     print("Sign-in is stubbed - clicking 'Sign in' logs you straight in.")

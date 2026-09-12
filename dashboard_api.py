@@ -13,6 +13,8 @@ import boto3
 from botocore.exceptions import ClientError
 from botocore.config import Config
 
+import portal_api
+
 
 MAX_UPLOAD_BYTES = 10 * 1024 * 1024
 UPLOAD_EXPIRY_SECONDS = 900
@@ -150,9 +152,16 @@ def lambda_handler(event: dict[str, Any], _context: Any) -> dict[str, Any]:
             return create_upload(event, s3_client)
         if route == "GET /status":
             return get_status(event, s3_client)
+        if portal_api.handles(route):
+            return _response(200, portal_api.handle(route, event, s3_client))
         return _response(404, {"message": "Route not found"})
     except ValueError as exc:
         return _response(400, {"message": str(exc)})
+    except RuntimeError as exc:
+        # Raised by the portal readers when a dependency is misconfigured or
+        # too slow; the message is safe to surface and actionable.
+        LOGGER.warning("Portal request failed: %s", exc)
+        return _response(502, {"message": str(exc)})
     except ClientError as exc:
         LOGGER.exception(
             "Dashboard storage request failed: %s",

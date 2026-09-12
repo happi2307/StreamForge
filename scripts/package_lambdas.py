@@ -22,6 +22,7 @@ REPOSITORY_ROOT = Path(__file__).resolve().parents[1]
 PHASE1_SOURCE_FILES = ("handler.py", "metadata.py", "validator.py")
 DATABASE_LOADER_SOURCE_FILES = ("handler.py", "db.py", "loader.py")
 DATABASE_SCHEMA_FILES = ("schema.sql", "indexes.sql", "constraints.sql")
+DASHBOARD_SOURCE_FILES = ("dashboard_api.py", "portal_api.py")
 EXCLUDED_RUNTIME_DIRECTORIES = {"__pycache__", "test", "tests", "testing"}
 EXCLUDED_RUNTIME_SUFFIXES = {".pyc", ".pyo"}
 
@@ -140,9 +141,14 @@ def package_database_loader(output_path: Path) -> None:
 
 
 def package_dashboard(output_path: Path) -> None:
-    """Build the standalone dashboard API archive."""
+    """Build the standalone dashboard API archive.
+
+    No dependencies are vendored: both modules import only the standard library
+    plus boto3, which the Lambda runtime already provides.
+    """
     with ZipFile(output_path, "w", ZIP_DEFLATED) as archive:
-        archive.write(REPOSITORY_ROOT / "dashboard_api.py", "dashboard_api.py")
+        for filename in DASHBOARD_SOURCE_FILES:
+            archive.write(REPOSITORY_ROOT / filename, filename)
 
 
 def main() -> None:

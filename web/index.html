@@ -6,97 +6,161 @@
     <meta name="theme-color" content="#07111f" />
     <title>StreamForge | Data Operations</title>
     <link rel="stylesheet" href="styles.css" />
+    <link rel="stylesheet" href="portal.css" />
   </head>
   <body>
     <div class="background-orb orb-one"></div>
     <div class="background-orb orb-two"></div>
 
-    <main class="shell">
-      <header class="topbar">
-        <a class="brand" href="/" aria-label="StreamForge home">
+    <div class="app-shell">
+      <aside class="sidebar" id="sidebar">
+        <a class="brand" href="#/upload" aria-label="StreamForge home">
           <span class="brand-mark" aria-hidden="true">S</span>
           <span>StreamForge</span>
         </a>
+
+        <nav class="nav" id="nav" aria-label="Platform sections">
+          <p class="nav-group">Overview</p>
+          <a class="nav-link" href="#/dashboard" data-route="dashboard">Dashboard</a>
+          <a class="nav-link" href="#/pipeline" data-route="pipeline">Pipeline</a>
+
+          <p class="nav-group">Data</p>
+          <a class="nav-link" href="#/upload" data-route="upload">Upload</a>
+          <a class="nav-link" href="#/lake" data-route="lake">Data Lake</a>
+          <a class="nav-link" href="#/warehouse" data-route="warehouse">Warehouse</a>
+          <a class="nav-link" href="#/analytics" data-route="analytics">Analytics</a>
+
+          <p class="nav-group">Governance</p>
+          <a class="nav-link" href="#/lineage" data-route="lineage">Lineage</a>
+          <a class="nav-link" href="#/metadata" data-route="metadata">Metadata</a>
+
+          <p class="nav-group">Operations</p>
+          <a class="nav-link" href="#/monitoring" data-route="monitoring">Monitoring</a>
+          <a class="nav-link" href="#/cost" data-route="cost">Cost</a>
+
+          <p class="nav-group">Platform</p>
+          <a class="nav-link" href="#/architecture" data-route="architecture">Architecture</a>
+          <a class="nav-link" href="#/infrastructure" data-route="infrastructure">Infrastructure</a>
+        </nav>
+
         <span class="environment"><span class="status-dot"></span> Development</span>
-      </header>
+      </aside>
 
-      <section class="hero">
-        <div>
-          <p class="eyebrow">Data operations console</p>
-          <h1>From raw CSV to trusted data.</h1>
-          <p class="hero-copy">Upload customer data securely. StreamForge validates every row, keeps a traceable audit trail, and separates clean data from exceptions.</p>
-        </div>
-        <div class="feature-list" aria-label="Pipeline features">
-          <span>Encrypted at rest</span><span>Schema validation</span><span>Event-driven</span>
-        </div>
-      </section>
+      <div class="content">
+        <header class="topbar">
+          <button id="nav-toggle" class="nav-toggle" type="button" aria-controls="sidebar" aria-expanded="false">
+            <span aria-hidden="true">☰</span><span class="visually-hidden">Toggle navigation</span>
+          </button>
+          <p id="page-title" class="page-title">Upload</p>
+          <span id="session-state" class="session-state"></span>
+        </header>
 
-      <section class="console-card">
-        <div class="console-heading">
-          <div>
-            <p class="eyebrow">Pipeline intake</p>
-            <h2>Upload a customer CSV</h2>
-          </div>
-          <button id="login" class="button button-primary">Sign in to continue <span aria-hidden="true">→</span></button>
-        </div>
+        <main id="view">
+          <!-- Upload: the original console, unchanged. app.js owns everything inside it. -->
+          <section class="page" id="page-upload">
+            <section class="hero">
+              <div>
+                <p class="eyebrow">Data operations console</p>
+                <h1>From raw CSV to trusted data.</h1>
+                <p class="hero-copy">Upload customer data securely. StreamForge validates every row, keeps a traceable audit trail, and separates clean data from exceptions.</p>
+              </div>
+              <div class="feature-list" aria-label="Pipeline features">
+                <span>Encrypted at rest</span><span>Schema validation</span><span>Event-driven</span>
+              </div>
+            </section>
 
-        <section id="app" hidden>
-          <div class="upload-grid">
-            <label class="dropzone" for="file">
-              <input id="file" type="file" accept=".csv,text/csv" />
-              <span class="upload-icon" aria-hidden="true">↑</span>
-              <span class="dropzone-title">Choose a CSV file</span>
-              <span class="dropzone-copy">CSV files up to 10 MB</span>
-              <span id="selected-file" class="selected-file" hidden></span>
-            </label>
-            <div class="upload-action">
-              <p>Files are encrypted with AWS KMS and processed asynchronously.</p>
-              <button id="upload" class="button button-primary" disabled>Upload and process <span aria-hidden="true">→</span></button>
-            </div>
-          </div>
-        </section>
+            <section class="console-card">
+              <div class="console-heading">
+                <div>
+                  <p class="eyebrow">Pipeline intake</p>
+                  <h2>Upload a customer CSV</h2>
+                </div>
+                <button id="login" class="button button-primary">Sign in to continue <span aria-hidden="true">→</span></button>
+              </div>
 
-        <div id="status-region" class="status-region" aria-live="polite" hidden>
-          <span id="status-icon" class="status-icon" aria-hidden="true"></span>
-          <p id="message"></p>
-        </div>
+              <section id="app" hidden>
+                <div class="upload-grid">
+                  <label class="dropzone" for="file">
+                    <input id="file" type="file" accept=".csv,text/csv" />
+                    <span class="upload-icon" aria-hidden="true">↑</span>
+                    <span class="dropzone-title">Choose a CSV file</span>
+                    <span class="dropzone-copy">CSV files up to 10 MB</span>
+                    <span id="selected-file" class="selected-file" hidden></span>
+                  </label>
+                  <div class="upload-action">
+                    <p>Files are encrypted with AWS KMS and processed asynchronously.</p>
+                    <button id="upload" class="button button-primary" disabled>Upload and process <span aria-hidden="true">→</span></button>
+                  </div>
+                </div>
+              </section>
 
-        <section id="result" class="result-card" hidden aria-live="polite">
-          <div class="result-heading">
-            <div>
-              <p class="eyebrow">Processing result</p>
-              <h2 id="result-title">Batch complete</h2>
-            </div>
-            <span id="result-batch" class="batch-id"></span>
-          </div>
+              <ol id="timeline" class="timeline" aria-label="Processing stages" hidden>
+                <li class="timeline-step" data-stage="upload"><span class="timeline-dot" aria-hidden="true"></span><span class="timeline-label">Upload</span></li>
+                <li class="timeline-step" data-stage="validation"><span class="timeline-dot" aria-hidden="true"></span><span class="timeline-label">Validation</span></li>
+                <li class="timeline-step" data-stage="etl"><span class="timeline-dot" aria-hidden="true"></span><span class="timeline-label">Glue ETL</span></li>
+                <li class="timeline-step" data-stage="curated"><span class="timeline-dot" aria-hidden="true"></span><span class="timeline-label">Curated</span></li>
+                <li class="timeline-step" data-stage="aurora"><span class="timeline-dot" aria-hidden="true"></span><span class="timeline-label">Aurora Load</span></li>
+                <li class="timeline-step" data-stage="complete"><span class="timeline-dot" aria-hidden="true"></span><span class="timeline-label">Complete</span></li>
+              </ol>
 
-          <div class="metrics" aria-label="Processing metrics">
-            <article><span>Total rows</span><strong id="total-records">—</strong></article>
-            <article class="metric-valid"><span>Valid rows</span><strong id="valid-records">—</strong></article>
-            <article class="metric-invalid"><span>Rejected rows</span><strong id="invalid-records">—</strong></article>
-          </div>
+              <div id="status-region" class="status-region" aria-live="polite" hidden>
+                <span id="status-icon" class="status-icon" aria-hidden="true"></span>
+                <p id="message"></p>
+              </div>
 
-          <div class="result-meta">
-            <span id="result-file"></span><span id="result-time"></span>
-          </div>
+              <section id="result" class="result-card" hidden aria-live="polite">
+                <div class="result-heading">
+                  <div>
+                    <p class="eyebrow">Processing result</p>
+                    <h2 id="result-title">Batch complete</h2>
+                  </div>
+                  <span id="result-batch" class="batch-id"></span>
+                </div>
 
-          <div class="downloads">
-            <div>
-              <h3>Outputs</h3>
-              <p>Download links expire after 15 minutes.</p>
-            </div>
-            <div class="download-actions">
-              <a id="download-clean" class="button button-secondary" target="_blank" rel="noopener" hidden>Download clean data <span aria-hidden="true">↓</span></a>
-              <a id="download-rejected" class="button button-ghost" target="_blank" rel="noopener" hidden>Download rejected rows <span aria-hidden="true">↓</span></a>
-            </div>
-          </div>
-        </section>
-      </section>
+                <div class="metrics" aria-label="Processing metrics">
+                  <article><span>Total rows</span><strong id="total-records">—</strong></article>
+                  <article class="metric-valid"><span>Valid rows</span><strong id="valid-records">—</strong></article>
+                  <article class="metric-invalid"><span>Rejected rows</span><strong id="invalid-records">—</strong></article>
+                </div>
 
-      <footer>StreamForge · Secure serverless data pipeline</footer>
-    </main>
+                <div class="result-meta">
+                  <span id="result-file"></span><span id="result-time"></span>
+                </div>
+
+                <div class="downloads">
+                  <div>
+                    <h3>Outputs</h3>
+                    <p>Download links expire after 15 minutes.</p>
+                  </div>
+                  <div class="download-actions">
+                    <a id="download-clean" class="button button-secondary" target="_blank" rel="noopener" hidden>Download clean data <span aria-hidden="true">↓</span></a>
+                    <a id="download-rejected" class="button button-ghost" target="_blank" rel="noopener" hidden>Download rejected rows <span aria-hidden="true">↓</span></a>
+                  </div>
+                </div>
+              </section>
+            </section>
+          </section>
+
+          <!-- Every other page is rendered into its container by web/pages/*.js -->
+          <section class="page" id="page-dashboard" hidden></section>
+          <section class="page" id="page-pipeline" hidden></section>
+          <section class="page" id="page-lake" hidden></section>
+          <section class="page" id="page-warehouse" hidden></section>
+          <section class="page" id="page-analytics" hidden></section>
+          <section class="page" id="page-lineage" hidden></section>
+          <section class="page" id="page-metadata" hidden></section>
+          <section class="page" id="page-monitoring" hidden></section>
+          <section class="page" id="page-cost" hidden></section>
+          <section class="page" id="page-architecture" hidden></section>
+          <section class="page" id="page-infrastructure" hidden></section>
+        </main>
+
+        <footer>StreamForge · Secure serverless data pipeline</footer>
+      </div>
+    </div>
 
     <script src="config.js"></script>
     <script src="app.js"></script>
+    <script type="module" src="router.js"></script>
   </body>
 </html>

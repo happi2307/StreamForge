@@ -29,9 +29,21 @@ function loadApp(storedToken) {
     return elements.get(selector);
   };
 
+  // app.js announces status changes on window; record them so tests can assert.
+  const events = [];
+
   const context = {
     document: { querySelector },
-    window: { STREAMFORGE_CONFIG: { apiEndpoint: '', cognitoDomain: '', clientId: '', redirectUri: '' } },
+    window: {
+      STREAMFORGE_CONFIG: { apiEndpoint: '', cognitoDomain: '', clientId: '', redirectUri: '' },
+      dispatchEvent: (event) => events.push(event),
+    },
+    CustomEvent: class {
+      constructor(type, init = {}) {
+        this.type = type;
+        this.detail = init.detail;
+      }
+    },
     sessionStorage: {
       getItem: (k) => (store.has(k) ? store.get(k) : null),
       setItem: (k, v) => store.set(k, v),
@@ -45,7 +57,7 @@ function loadApp(storedToken) {
   };
   vm.createContext(context);
   vm.runInContext(SOURCE, context);
-  return { context, store, elements };
+  return { context, store, elements, events };
 }
 
 /** Builds a JWT whose payload expires `secondsFromNow` from now. */
@@ -106,4 +118,28 @@ test('a signed-out user is not left stranded after the token expires', () => {
   // token hid the sign-in button forever.
   const { context } = loadApp(jwt(-1));
   assert.strictEqual(context.token(), null);
+});
+
+test('exposes the session helpers for the portal modules', () => {
+  // web/api.js relies on this: app.js holds token/signOut in consts, which ES
+  // modules cannot reach, so a second copy would drift out of sync.
+  const { context } = loadApp(jwt(3600));
+
+  assert.strictEqual(typeof context.window.StreamForge.token, 'function');
+  assert.strictEqual(typeof context.window.StreamForge.signOut, 'function');
+  assert.ok(context.window.StreamForge.token(), 'shared token() must work');
+});
+
+test('announces status changes on window for the timeline', () => {
+  const { context, events } = loadApp(jwt(3600));
+  events.length = 0;
+
+  context.setStatus('Validating rows…', 'processing');
+
+  assert.strictEqual(events.length, 1);
+  assert.strictEqual(events[0].type, 'streamforge:status');
+  // Field-by-field: the detail object comes from the vm realm, so its prototype
+  // is not the host's and deepStrictEqual would reject it.
+  assert.strictEqual(events[0].detail.text, 'Validating rows…');
+  assert.strictEqual(events[0].detail.state, 'processing');
 });

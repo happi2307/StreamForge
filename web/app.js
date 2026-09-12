@@ -45,6 +45,10 @@ function signOut(reason) {
   if (reason) setStatus(reason, 'error');
 }
 
+// The portal pages are ES modules and cannot see these consts, so share the
+// session handling rather than letting a second copy drift out of sync.
+window.StreamForge = { token, signOut };
+
 function base64UrlEncode(bytes) {
   let binary = '';
   bytes.forEach((byte) => { binary += String.fromCharCode(byte); });
@@ -62,6 +66,7 @@ function setStatus(text, state = 'processing') {
   message.textContent = text;
   statusRegion.hidden = false;
   statusRegion.className = `status-region is-${state}`;
+  window.dispatchEvent(new CustomEvent('streamforge:status', { detail: { text, state } }));
 }
 
 function formatTimestamp(timestamp) {
@@ -84,6 +89,7 @@ function renderResult(status) {
   downloadRejected.hidden = !downloads.rejected;
   if (downloads.clean) downloadClean.href = downloads.clean;
   if (downloads.rejected) downloadRejected.href = downloads.rejected;
+  window.dispatchEvent(new CustomEvent('streamforge:result', { detail: status }));
 }
 
 async function exchangeCode() {
@@ -100,7 +106,9 @@ async function exchangeCode() {
   if (!response.ok) throw new Error(payload.error_description || 'Sign-in failed');
   sessionStorage.setItem('id_token', payload.id_token);
   sessionStorage.removeItem('pkce_verifier');
-  history.replaceState({}, '', config.redirectUri);
+  // Keep the hash: it is the portal route, and dropping it would bounce the
+  // user back to Upload after every sign-in.
+  history.replaceState({}, '', `${config.redirectUri}${location.hash}`);
 }
 
 login.onclick = async () => {
@@ -206,5 +214,8 @@ exchangeCode().then(() => {
   if (token()) {
     login.hidden = true;
     app.hidden = false;
+    // Portal pages rendered a signed-out state before the token arrived;
+    // this tells the router to rebuild them.
+    window.dispatchEvent(new CustomEvent('streamforge:signedin'));
   }
 }).catch((error) => setStatus(error.message, 'error'));

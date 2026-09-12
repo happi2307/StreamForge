@@ -5,10 +5,33 @@ data "aws_canonical_user_id" "current" {}
 locals {
   cloudfront_log_delivery_canonical_user_id = "c4c1ede66af53448b93c283ce9448c4ba468c9432aa01d700d3878632f77d2d0"
 
+  # config.js is rendered from its template further down; the rest are
+  # development-only files that must never reach the bucket.
+  excluded_assets = [
+    "config.js",
+    "config.template.js",
+    "config.example.js",
+    "app.test.js",
+  ]
+
+  content_types = {
+    "css"   = "text/css"
+    "html"  = "text/html"
+    "ico"   = "image/x-icon"
+    "js"    = "application/javascript"
+    "json"  = "application/json"
+    "png"   = "image/png"
+    "svg"   = "image/svg+xml"
+    "webp"  = "image/webp"
+    "woff2" = "font/woff2"
+  }
+
+  # Every file under web/ is published, so new pages and modules deploy without
+  # touching Terraform.
   asset_content_types = {
-    "index.html" = "text/html"
-    "styles.css" = "text/css"
-    "app.js"     = "application/javascript"
+    for file in fileset(var.asset_source_directory, "**/*") :
+    file => lookup(local.content_types, lower(reverse(split(".", file))[0]), "application/octet-stream")
+    if !contains(local.excluded_assets, file)
   }
 }
 

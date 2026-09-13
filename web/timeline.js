@@ -6,13 +6,13 @@
  * status strings below -- kept in one place so a wording change here is the
  * only edit needed.
  *
- * Honesty note: /status reports Phase 1 only. Glue ETL, the curated dataset and
- * the Aurora load run asynchronously downstream and are not observed by this
+ * Honesty note: /status reports Phase 1 only. The Glue ETL and the curated
+ * dataset it writes run asynchronously downstream and are not observed by this
  * poll, so they are shown as pending rather than pretended complete.
  */
 
 const OBSERVED = ['upload', 'validation', 'complete'];
-const DOWNSTREAM = ['etl', 'curated', 'aurora'];
+const DOWNSTREAM = ['etl', 'curated'];
 
 const STAGE_BY_STATUS = [
   ['secure upload URL', 'upload'],

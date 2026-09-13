@@ -380,19 +380,10 @@ def lineage(event: dict[str, Any], s3: Any) -> dict[str, Any]:
             "transformations": [],
         },
         {
-            "id": "aurora",
-            "label": "Aurora PostgreSQL",
-            "purpose": "Relational serving layer loaded incrementally with idempotent MERGE statements.",
-            "input": "Curated Parquet",
-            "output": "Queryable tables and audit history",
-            "records": None,
-            "transformations": [],
-        },
-        {
             "id": "portal",
             "label": "This portal",
             "purpose": "Reads every layer above to present the platform without the AWS console.",
-            "input": "S3, Glue, Athena, CloudWatch, Aurora",
+            "input": "S3, Glue, Athena, CloudWatch",
             "output": "Dashboards",
             "records": None,
             "transformations": [],
@@ -533,11 +524,11 @@ def pipeline(event: dict[str, Any], s3: Any) -> dict[str, Any]:
         {
             "name": "Aurora PostgreSQL",
             "service": "Amazon RDS",
-            "role": "Relational serving layer",
-            "status": "not-deployed" if not _env("AURORA_CLUSTER_ARN") else "healthy",
+            "role": "Relational serving layer, queried read-only by the Warehouse page",
+            "status": "not-deployed" if not _env("AURORA_CLUSTER_ARN") else "idle",
             "detail": "Phase 5 is not deployed in this environment"
             if not _env("AURORA_CLUSTER_ARN")
-            else _env("AURORA_CLUSTER_ARN").rsplit(":", 1)[-1],
+            else "Schema deployed; no loader wired, so the pipeline does not write to it",
         },
     ]
 

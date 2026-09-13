@@ -345,3 +345,114 @@ resource "aws_glue_catalog_table" "curated" {
     ]
   }
 }
+
+# ---------------------------------------------------------------------------
+# Automatic ETL — clean-bucket writes start the Glue job
+#
+# EventBridge has no native "start Glue job" target, so the job hangs off a Glue
+# workflow with an EVENT trigger, which EventBridge can start directly. That
+# avoids introducing a Lambda whose only purpose is to call start_job_run.
+# ---------------------------------------------------------------------------
+
+resource "aws_s3_bucket_notification" "clean_eventbridge" {
+  count = var.enable_auto_etl ? 1 : 0
+
+  bucket      = var.clean_bucket_name
+  eventbridge = true
+}
+
+resource "aws_glue_workflow" "curated" {
+  count = var.enable_auto_etl ? 1 : 0
+
+  name                = "${var.glue_job_name}-workflow"
+  description         = "Runs the curated transform when Phase 1 writes clean output."
+  max_concurrent_runs = 1
+  tags                = var.tags
+}
+
+resource "aws_glue_trigger" "curated_on_clean_write" {
+  count = var.enable_auto_etl ? 1 : 0
+
+  name          = "${var.glue_job_name}-on-clean-write"
+  description   = "EventBridge-driven trigger for the curated transform."
+  type          = "EVENT"
+  workflow_name = aws_glue_workflow.curated[0].name
+
+  actions {
+    job_name = aws_glue_job.this.name
+  }
+
+  # The job reprocesses every manifest, so one run covers N uploads. Batching
+  # coalesces a burst into a single run instead of racing the job's concurrency
+  # limit; a lone upload still starts within batch_window seconds.
+  event_batching_condition {
+    batch_size   = var.etl_batch_size
+    batch_window = var.etl_batch_window_seconds
+  }
+
+  tags = var.tags
+}
+
+data "aws_iam_policy_document" "etl_events_assume" {
+  count = var.enable_auto_etl ? 1 : 0
+
+  statement {
+    actions = ["sts:AssumeRole"]
+    principals {
+      type        = "Service"
+      identifiers = ["events.amazonaws.com"]
+    }
+  }
+}
+
+resource "aws_iam_role" "etl_events" {
+  count = var.enable_auto_etl ? 1 : 0
+
+  name               = "${var.glue_job_name}-events-role"
+  assume_role_policy = data.aws_iam_policy_document.etl_events_assume[0].json
+  tags               = var.tags
+}
+
+data "aws_iam_policy_document" "etl_events" {
+  count = var.enable_auto_etl ? 1 : 0
+
+  statement {
+    sid       = "StartCuratedWorkflow"
+    actions   = ["glue:notifyEvent"]
+    resources = [aws_glue_workflow.curated[0].arn]
+  }
+}
+
+resource "aws_iam_role_policy" "etl_events" {
+  count = var.enable_auto_etl ? 1 : 0
+
+  name   = "${var.glue_job_name}-events"
+  role   = aws_iam_role.etl_events[0].id
+  policy = data.aws_iam_policy_document.etl_events[0].json
+}
+
+resource "aws_cloudwatch_event_rule" "clean_objects" {
+  count = var.enable_auto_etl ? 1 : 0
+
+  name        = "${var.glue_job_name}-clean-writes"
+  description = "Phase 1 clean output starts the curated transform."
+
+  event_pattern = jsonencode({
+    source        = ["aws.s3"]
+    "detail-type" = ["Object Created"]
+    detail = {
+      bucket = { name = [var.clean_bucket_name] }
+    }
+  })
+
+  tags = var.tags
+}
+
+resource "aws_cloudwatch_event_target" "curated_workflow" {
+  count = var.enable_auto_etl ? 1 : 0
+
+  rule      = aws_cloudwatch_event_rule.clean_objects[0].name
+  target_id = "CuratedGlueWorkflow"
+  arn       = aws_glue_workflow.curated[0].arn
+  role_arn  = aws_iam_role.etl_events[0].arn
+}

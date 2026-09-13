@@ -530,9 +530,9 @@ resource "aws_cloudwatch_log_metric_filter" "records_failed" {
   pattern        = "{ $.status = \"SUCCESS\" }"
 
   metric_transformation {
-    name          = "RecordsFailed"
-    namespace     = var.pipeline_metric_namespace
-    value = "$.records_failed"
+    name      = "RecordsFailed"
+    namespace = var.pipeline_metric_namespace
+    value     = "$.records_failed"
     dimensions = {
       Environment = "$.stage"
     }
@@ -545,9 +545,9 @@ resource "aws_cloudwatch_log_metric_filter" "records_inserted" {
   pattern        = "{ $.status = \"SUCCESS\" }"
 
   metric_transformation {
-    name          = "RecordsInserted"
-    namespace     = var.pipeline_metric_namespace
-    value = "$.records_inserted"
+    name      = "RecordsInserted"
+    namespace = var.pipeline_metric_namespace
+    value     = "$.records_inserted"
     dimensions = {
       Environment = "$.stage"
     }

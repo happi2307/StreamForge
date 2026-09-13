@@ -187,3 +187,21 @@ variable "tags" {
   type        = map(string)
   default     = {}
 }
+
+variable "enable_auto_etl" {
+  description = "Start the curated transform automatically when Phase 1 writes clean output."
+  type        = bool
+  default     = true
+}
+
+variable "etl_batch_size" {
+  description = "Clean-object events that trigger a run immediately."
+  type        = number
+  default     = 5
+}
+
+variable "etl_batch_window_seconds" {
+  description = "Seconds to wait for more events before running. A single upload starts after this delay."
+  type        = number
+  default     = 60
+}

@@ -89,8 +89,12 @@ function watchDownstream(since) {
   if (poller) clearTimeout(poller);
   const deadline = Date.now() + POLL_LIMIT_MS;
 
-  setStage('etl', 'pending', 'Waiting for the Glue trigger to fire.');
-  setStage('curated', 'pending');
+  // Show it as in-progress straight away. The trigger batches events before
+  // starting Glue, so there is a gap where the run does not exist yet -- left
+  // grey, that gap is indistinguishable from "never runs", which is exactly
+  // how it kept being read.
+  setStage('etl', 'active', 'Waiting for the Glue trigger to fire.');
+  setStage('curated', 'pending', 'Written once the Glue run finishes.');
 
   const tick = async () => {
     let data;

@@ -201,7 +201,7 @@ variable "etl_batch_size" {
 }
 
 variable "etl_batch_window_seconds" {
-  description = "Seconds to wait for more events before running. A single upload starts after this delay."
+  description = "Seconds to wait for more events before running. A single upload starts after this delay, so keep it short enough that the portal timeline does not look stalled."
   type        = number
-  default     = 60
+  default     = 15
 }

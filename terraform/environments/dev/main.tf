@@ -152,6 +152,7 @@ module "kms" {
     "arn:aws:logs:${data.aws_region.current.name}:${data.aws_caller_identity.current.account_id}:log-group:/aws-glue/jobs/${var.phase3_glue_job_name}-security-role/${var.phase3_glue_job_role_name}/error",
     "arn:aws:logs:${data.aws_region.current.name}:${data.aws_caller_identity.current.account_id}:log-group:/aws-glue/jobs/${var.phase3_glue_job_name}-security-role/${var.phase3_glue_job_role_name}/output",
     "arn:aws:logs:${data.aws_region.current.name}:${data.aws_caller_identity.current.account_id}:log-group:/aws/lambda/${var.phase5_loader_function_name}",
+    "arn:aws:logs:${data.aws_region.current.name}:${data.aws_caller_identity.current.account_id}:log-group:/aws/vpc/${var.project_name}-${var.environment}-phase5",
   ]
   tags = merge(local.common_tags, { Name = var.kms_alias_name })
 }
@@ -333,6 +334,7 @@ module "phase5_serving" {
   subnet_cidrs              = var.phase5_subnet_cidrs
   db_name                   = var.phase5_db_name
   db_schema                 = var.phase5_db_schema
+  enable_vpc_endpoints      = var.phase5_enable_vpc_endpoints
   serverless_min_acu        = var.phase5_serverless_min_acu
   serverless_max_acu        = var.phase5_serverless_max_acu
   curated_bucket_name       = module.buckets["curated"].bucket_name
@@ -382,6 +384,7 @@ module "web_console" {
   curated_table           = var.phase3_curated_table_name
   glue_job_name           = var.phase3_glue_job_name
   processor_function_name = var.lambda_function_name
+  enable_warehouse        = true
   aurora_cluster_arn      = module.phase5_serving.cluster_arn
   aurora_secret_arn       = module.phase5_serving.database_secret_arn
   aurora_database         = var.phase5_db_name

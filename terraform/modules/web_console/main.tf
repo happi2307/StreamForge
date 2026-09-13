@@ -91,7 +91,7 @@ data "aws_iam_policy_document" "lambda_access" {
 # Aurora access is only granted when Phase 5 is deployed, so the portal role
 # stays minimal in environments without a serving layer.
 data "aws_iam_policy_document" "aurora_access" {
-  count = var.aurora_cluster_arn == "" ? 0 : 1
+  count = var.enable_warehouse ? 1 : 0
 
   statement {
     sid       = "PortalWarehouseRead"
@@ -107,7 +107,7 @@ data "aws_iam_policy_document" "aurora_access" {
 }
 
 resource "aws_iam_role_policy" "aurora_access" {
-  count = var.aurora_cluster_arn == "" ? 0 : 1
+  count = var.enable_warehouse ? 1 : 0
 
   name_prefix = "portal-warehouse-"
   role        = aws_iam_role.lambda.id

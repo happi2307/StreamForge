@@ -180,8 +180,12 @@ resource "aws_lambda_function" "this" {
   ]
 
   lifecycle {
+    # Code is deployed by CI; Terraform owns configuration only. Ignoring
+    # filename without source_code_hash makes the provider send an empty
+    # update and fail.
     ignore_changes = [
       filename,
+      source_code_hash,
     ]
   }
 }

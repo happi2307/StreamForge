@@ -405,6 +405,12 @@ variable "phase5_subnet_cidrs" {
   default     = ["10.20.1.0/24", "10.20.2.0/24"]
 }
 
+variable "phase5_enable_vpc_endpoints" {
+  description = "Five interface endpoints for the in-VPC loader, about $36/month. The portal reads Aurora via the Data API and does not need them."
+  type        = bool
+  default     = false
+}
+
 variable "phase5_serverless_min_acu" {
   description = "Minimum Aurora Serverless v2 capacity units. 0 lets an idle cluster pause, which is the difference between roughly $1 and $45 a month."
   type        = number

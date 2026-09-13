@@ -57,6 +57,12 @@ variable "processor_function_name" {
   default     = ""
 }
 
+variable "enable_warehouse" {
+  description = "Grant the portal RDS Data API access. A static flag, because count cannot depend on an ARN that is unknown until apply."
+  type        = bool
+  default     = false
+}
+
 variable "aurora_cluster_arn" {
   description = "Aurora cluster ARN for the Warehouse page. Empty disables the page and its IAM grant."
   type        = string

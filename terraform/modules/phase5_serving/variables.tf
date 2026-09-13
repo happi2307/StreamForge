@@ -57,9 +57,9 @@ variable "db_master_username" {
 }
 
 variable "db_engine_version" {
-  description = "Aurora PostgreSQL engine version. Scale-to-zero needs 16.3 or newer."
+  description = "Aurora PostgreSQL engine version. Scale-to-zero needs 16.3 or newer; 16.6 is not a published version."
   type        = string
-  default     = "16.6"
+  default     = "17.7"
 }
 
 variable "serverless_min_acu" {
@@ -72,6 +72,12 @@ variable "seconds_until_auto_pause" {
   description = "Idle seconds before a min_capacity 0 cluster pauses. Ignored unless serverless_min_acu is 0."
   type        = number
   default     = 300
+}
+
+variable "enable_vpc_endpoints" {
+  description = "Create the five interface endpoints the in-VPC loader needs. About $36/month; not required by the RDS Data API path the portal uses."
+  type        = bool
+  default     = true
 }
 
 variable "enable_data_api" {

@@ -6,12 +6,13 @@ locals {
   cloudfront_log_delivery_canonical_user_id = "c4c1ede66af53448b93c283ce9448c4ba468c9432aa01d700d3878632f77d2d0"
 
   # config.js is rendered from its template further down; the rest are
-  # development-only files that must never reach the bucket.
+  # development-only files that must never reach the bucket. Tests are matched
+  # by pattern rather than listed, so a new *.test.* file cannot be published
+  # by being forgotten here.
   excluded_assets = [
     "config.js",
     "config.template.js",
     "config.example.js",
-    "app.test.js",
   ]
 
   content_types = {
@@ -31,7 +32,7 @@ locals {
   asset_content_types = {
     for file in fileset(var.asset_source_directory, "**/*") :
     file => lookup(local.content_types, lower(reverse(split(".", file))[0]), "application/octet-stream")
-    if !contains(local.excluded_assets, file)
+    if !contains(local.excluded_assets, file) && !can(regex("\\.test\\.", file))
   }
 }
 

@@ -133,6 +133,8 @@ resource "aws_vpc_security_group_ingress_rule" "aurora_from_lambda" {
 }
 
 resource "aws_vpc_security_group_ingress_rule" "endpoints_from_lambda" {
+  count = var.enable_vpc_endpoints ? 1 : 0
+
   security_group_id            = aws_security_group.endpoints.id
   description                  = "HTTPS from the loader Lambda to interface endpoints."
   from_port                    = 443
@@ -177,8 +179,12 @@ resource "aws_vpc_endpoint" "s3" {
   tags              = merge(var.tags, { Name = "${var.name_prefix}-phase5-s3" })
 }
 
+# Interface endpoints exist so the in-VPC loader Lambda can reach AWS APIs
+# without a NAT gateway. They bill ~$7.30/month each whether used or not, and
+# nothing else needs them: the portal reads Aurora through the RDS Data API from
+# outside the VPC. Disable them when the loader is not in use.
 resource "aws_vpc_endpoint" "interface" {
-  for_each = toset(["secretsmanager", "kms", "logs", "sts", "monitoring"])
+  for_each = var.enable_vpc_endpoints ? toset(["secretsmanager", "kms", "logs", "sts", "monitoring"]) : toset([])
 
   vpc_id              = aws_vpc.this.id
   service_name        = "com.amazonaws.${data.aws_region.current.name}.${each.value}"
@@ -519,8 +525,7 @@ resource "aws_cloudwatch_log_metric_filter" "records_failed" {
   metric_transformation {
     name          = "RecordsFailed"
     namespace     = var.pipeline_metric_namespace
-    value         = "$.records_failed"
-    default_value = "0"
+    value = "$.records_failed"
     dimensions = {
       Environment = "$.stage"
     }
@@ -535,8 +540,7 @@ resource "aws_cloudwatch_log_metric_filter" "records_inserted" {
   metric_transformation {
     name          = "RecordsInserted"
     namespace     = var.pipeline_metric_namespace
-    value         = "$.records_inserted"
-    default_value = "0"
+    value = "$.records_inserted"
     dimensions = {
       Environment = "$.stage"
     }

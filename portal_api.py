@@ -682,6 +682,53 @@ def warehouse(event: dict[str, Any], _s3: Any) -> dict[str, Any]:
 
 
 # ---------------------------------------------------------------------------
+# GET /api/etl
+# ---------------------------------------------------------------------------
+
+def etl(event: dict[str, Any], s3: Any) -> dict[str, Any]:
+    """Downstream progress for the upload timeline.
+
+    /status reports Phase 1 only, so without this the Glue and Curated stages
+    could never light up and a working pipeline looked identical to a broken
+    one. Deliberately uncached: the timeline polls it while a run is in flight.
+    """
+    job_name = _env("GLUE_JOB_NAME")
+    result: dict[str, Any] = {"job_name": job_name, "state": "UNKNOWN", "runs": []}
+
+    if job_name:
+        try:
+            runs = _client("glue").get_job_runs(JobName=job_name, MaxResults=5).get("JobRuns", [])
+        except ClientError as exc:
+            code = exc.response.get("Error", {}).get("Code", "unknown")
+            return {**result, "state": "UNAVAILABLE", "reason": f"Glue rejected the request ({code})."}
+
+        result["runs"] = [
+            {
+                "state": run.get("JobRunState"),
+                "started": _iso(run.get("StartedOn")),
+                "completed": _iso(run.get("CompletedOn")),
+                "seconds": run.get("ExecutionTime"),
+                "trigger": run.get("TriggerName"),
+                "error": run.get("ErrorMessage"),
+            }
+            for run in runs
+        ]
+        result["state"] = result["runs"][0]["state"] if result["runs"] else "NEVER_RUN"
+
+    buckets = _zone_buckets()
+    for zone in ("curated", "quarantine"):
+        if zone not in buckets:
+            continue
+        objects = _list_objects(s3, buckets[zone])
+        result[zone] = {
+            "object_count": len(objects),
+            "latest": max((o["last_modified"] or "" for o in objects), default=None) or None,
+        }
+
+    return result
+
+
+# ---------------------------------------------------------------------------
 # Routing
 # ---------------------------------------------------------------------------
 
@@ -694,6 +741,7 @@ ROUTES: dict[str, Callable[[dict[str, Any], Any], dict[str, Any]]] = {
     "GET /api/pipeline": pipeline,
     "GET /api/analytics": analytics,
     "GET /api/warehouse": warehouse,
+    "GET /api/etl": etl,
 }
 
 

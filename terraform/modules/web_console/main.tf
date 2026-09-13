@@ -60,7 +60,7 @@ data "aws_iam_policy_document" "lambda_access" {
 
   statement {
     sid       = "PortalCatalogRead"
-    actions   = ["glue:GetDatabase", "glue:GetDatabases", "glue:GetTable", "glue:GetTables", "glue:GetPartitions"]
+    actions   = ["glue:GetDatabase", "glue:GetDatabases", "glue:GetTable", "glue:GetTables", "glue:GetPartitions", "glue:GetJobRuns", "glue:GetJobRun"]
     resources = ["*"]
   }
 
@@ -294,6 +294,7 @@ resource "aws_apigatewayv2_route" "portal" {
     "pipeline",
     "analytics",
     "warehouse",
+    "etl",
   ])
 
   api_id             = aws_apigatewayv2_api.this.id

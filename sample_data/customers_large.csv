@@ -1,0 +1,165 @@
+customer_id,name,email,sales,region,segment
+1000,Priya Sharma,priya.sharma@example.com,1614,EMEA,Enterprise
+1001,Marcus Haddad,marcus.haddad@acme.co.uk,6528.9,AMER,Mid-Market
+1002,Yuki Asante,yuki.asante@northwind.io,6203,APAC,SMB
+1003,Amara Nair,amara.nair@globex.net,6021,LATAM,Enterprise
+1004,Tomas Pereira,tomas.pereira@initech.org,8933,EMEA,Mid-Market
+1005,Ingrid Dubois,ingrid.dubois@umbrella.co,980,AMER,SMB
+1006,Rafael Volkov,rafael.volkov@soylent.dev,6688,APAC,Enterprise
+1007,Nadia Kowalski,nadia.kowalski@hooli.com,4272,LATAM,Mid-Market
+1008,Oliver Nowak,oliver.nowak@example.com,5167,EMEA,SMB
+1009,Fatima Bergstrom,fatima.bergstrom@acme.co.uk,7561,AMER,Enterprise
+1010,Sven Lindqvist,sven.lindqvist@northwind.io,6911.03,APAC,Mid-Market
+1011,Leila Castro,leila.castro@globex.net,7010.5,LATAM,SMB
+1012,Dmitri Laurent,dmitri.laurent@initech.org,5473,EMEA,Enterprise
+1013,Chiara Okafor,chiara.okafor@umbrella.co,4240,AMER,Mid-Market
+1014,Kwame Novak,kwame.novak@soylent.dev,7257,APAC,SMB
+1015,Hannah Weber,hannah.weber@hooli.com,5607,LATAM,Enterprise
+1016,Mateo Braun,mateo.braun@example.com,5793,EMEA,Mid-Market
+1017,Sofia Mabaso,sofia.mabaso@acme.co.uk,1112.84,AMER,SMB
+1018,Arjun Silva,arjun.silva@northwind.io,4158.79,APAC,Enterprise
+1019,Elena Ricci,elena.ricci@globex.net,6069.88,LATAM,Mid-Market
+1020,Joon Park,joon.park@initech.org,8681,EMEA,SMB
+1021,Mira Khan,mira.khan@umbrella.co,9219,AMER,Enterprise
+1022,Felix Rossi,felix.rossi@soylent.dev,6797,APAC,Mid-Market
+1023,Zara Farah,zara.farah@hooli.com,2213,LATAM,SMB
+1024,Andre Iyer,andre.iyer@example.com,6773.63,EMEA,Enterprise
+1025,Noor Rahman,noor.rahman@acme.co.uk,6330.46,AMER,Mid-Market
+1026,Piotr Tanaka,piotr.tanaka@northwind.io,416,APAC,SMB
+1027,Ayesha Mensah,ayesha.mensah@globex.net,4473,LATAM,Enterprise
+1028,Lucas Moreau,lucas.moreau@initech.org,1949,EMEA,Mid-Market
+1029,Thandi Aziz,thandi.aziz@umbrella.co,3062,AMER,SMB
+1030,Priya Sharma,priya.sharma@soylent.dev,6314.51,APAC,Enterprise
+1031,Marcus Haddad,marcus.haddad@hooli.com,3282,LATAM,Mid-Market
+1032,Yuki Asante,yuki.asante@example.com,1265.07,EMEA,SMB
+1033,Amara Nair,amara.nair@acme.co.uk,2420.77,AMER,Enterprise
+1034,Tomas Pereira,tomas.pereira@northwind.io,7243.62,APAC,Mid-Market
+1035,Ingrid Dubois,ingrid.dubois@globex.net,2048,LATAM,SMB
+1036,Rafael Volkov,rafael.volkov@initech.org,8862,EMEA,Enterprise
+1037,Nadia Kowalski,nadia.kowalski@umbrella.co,6643.94,AMER,Mid-Market
+1038,Oliver Nowak,oliver.nowak@soylent.dev,3504.69,APAC,SMB
+1039,Fatima Bergstrom,fatima.bergstrom@hooli.com,335.25,LATAM,Enterprise
+1040,Sven Lindqvist,sven.lindqvist@example.com,9069,EMEA,Mid-Market
+1041,Leila Castro,leila.castro@acme.co.uk,341,AMER,SMB
+1042,Dmitri Laurent,dmitri.laurent@northwind.io,6027,APAC,Enterprise
+1043,Chiara Okafor,chiara.okafor@globex.net,6804,LATAM,Mid-Market
+1044,Kwame Novak,kwame.novak@initech.org,295.27,EMEA,SMB
+1045,Hannah Weber,hannah.weber@umbrella.co,9145,AMER,Enterprise
+1046,Mateo Braun,mateo.braun@soylent.dev,5602.16,APAC,Mid-Market
+1047,Sofia Mabaso,sofia.mabaso@hooli.com,2965.68,LATAM,SMB
+1048,Arjun Silva,arjun.silva@example.com,6069,EMEA,Enterprise
+1049,Elena Ricci,elena.ricci@acme.co.uk,5832.89,AMER,Mid-Market
+1050,Joon Park,joon.park@northwind.io,2627,APAC,SMB
+1051,Mira Khan,mira.khan@globex.net,1524.29,LATAM,Enterprise
+1052,Felix Rossi,felix.rossi@initech.org,6373.85,EMEA,Mid-Market
+1053,Zara Farah,zara.farah@umbrella.co,3622.21,AMER,SMB
+1054,Andre Iyer,andre.iyer@soylent.dev,640.4,APAC,Enterprise
+1055,Noor Rahman,noor.rahman@hooli.com,7112,LATAM,Mid-Market
+1056,Piotr Tanaka,piotr.tanaka@example.com,7548,EMEA,SMB
+1057,Ayesha Mensah,ayesha.mensah@acme.co.uk,3708.18,AMER,Enterprise
+1058,Lucas Moreau,lucas.moreau@northwind.io,2401.42,APAC,Mid-Market
+1059,Thandi Aziz,thandi.aziz@globex.net,4992.27,LATAM,SMB
+1060,Priya Sharma,priya.sharma@initech.org,4362,EMEA,Enterprise
+1061,Marcus Haddad,marcus.haddad@umbrella.co,3337.43,AMER,Mid-Market
+1062,Yuki Asante,yuki.asante@soylent.dev,1645.47,APAC,SMB
+1063,Amara Nair,amara.nair@hooli.com,2973,LATAM,Enterprise
+1064,Tomas Pereira,tomas.pereira@example.com,2757.01,EMEA,Mid-Market
+1065,Ingrid Dubois,ingrid.dubois@acme.co.uk,8707,AMER,SMB
+1066,Rafael Volkov,rafael.volkov@northwind.io,4836,APAC,Enterprise
+1067,Nadia Kowalski,nadia.kowalski@globex.net,7202,LATAM,Mid-Market
+1068,Oliver Nowak,oliver.nowak@initech.org,4023.16,EMEA,SMB
+1069,Fatima Bergstrom,fatima.bergstrom@umbrella.co,3328,AMER,Enterprise
+1070,Sven Lindqvist,sven.lindqvist@soylent.dev,4261.98,APAC,Mid-Market
+1071,Leila Castro,leila.castro@hooli.com,8885,LATAM,SMB
+1072,Dmitri Laurent,dmitri.laurent@example.com,3021.06,EMEA,Enterprise
+1073,Chiara Okafor,chiara.okafor@acme.co.uk,4582,AMER,Mid-Market
+1074,Kwame Novak,kwame.novak@northwind.io,6225.96,APAC,SMB
+1075,Hannah Weber,hannah.weber@globex.net,354,LATAM,Enterprise
+1076,Mateo Braun,mateo.braun@initech.org,4426.29,EMEA,Mid-Market
+1077,Sofia Mabaso,sofia.mabaso@umbrella.co,7814.35,AMER,SMB
+1078,Arjun Silva,arjun.silva@soylent.dev,585,APAC,Enterprise
+1079,Elena Ricci,elena.ricci@hooli.com,6028,LATAM,Mid-Market
+1080,Joon Park,joon.park@example.com,2057.94,EMEA,SMB
+1081,Mira Khan,mira.khan@acme.co.uk,5775,AMER,Enterprise
+1082,Felix Rossi,felix.rossi@northwind.io,6642,APAC,Mid-Market
+1083,Zara Farah,zara.farah@globex.net,1324,LATAM,SMB
+1084,Andre Iyer,andre.iyer@initech.org,8256,EMEA,Enterprise
+1085,Noor Rahman,noor.rahman@umbrella.co,1562.16,AMER,Mid-Market
+1086,Piotr Tanaka,piotr.tanaka@soylent.dev,1651.65,APAC,SMB
+1087,Ayesha Mensah,ayesha.mensah@hooli.com,6581.49,LATAM,Enterprise
+1088,Lucas Moreau,lucas.moreau@example.com,3471.23,EMEA,Mid-Market
+1089,Thandi Aziz,thandi.aziz@acme.co.uk,1015.65,AMER,SMB
+1090,Priya Sharma,priya.sharma@northwind.io,5438,APAC,Enterprise
+1091,Marcus Haddad,marcus.haddad@globex.net,6901,LATAM,Mid-Market
+1092,Yuki Asante,yuki.asante@initech.org,300.44,EMEA,SMB
+1093,Amara Nair,amara.nair@umbrella.co,4629,AMER,Enterprise
+1094,Tomas Pereira,tomas.pereira@soylent.dev,4982,APAC,Mid-Market
+1095,Ingrid Dubois,ingrid.dubois@hooli.com,2146,LATAM,SMB
+1096,Rafael Volkov,rafael.volkov@example.com,265,EMEA,Enterprise
+1097,Nadia Kowalski,nadia.kowalski@acme.co.uk,284.35,AMER,Mid-Market
+1098,Oliver Nowak,oliver.nowak@northwind.io,219.75,APAC,SMB
+1099,Fatima Bergstrom,fatima.bergstrom@globex.net,1307.97,LATAM,Enterprise
+1100,Sven Lindqvist,sven.lindqvist@initech.org,5322,EMEA,Mid-Market
+1101,Leila Castro,leila.castro@umbrella.co,7952,AMER,SMB
+1102,Dmitri Laurent,dmitri.laurent@soylent.dev,1765.0,APAC,Enterprise
+1103,Chiara Okafor,chiara.okafor@hooli.com,1675,LATAM,Mid-Market
+1104,Kwame Novak,kwame.novak@example.com,6813.92,EMEA,SMB
+1105,Hannah Weber,hannah.weber@acme.co.uk,4817.81,AMER,Enterprise
+1106,Mateo Braun,mateo.braun@northwind.io,464.02,APAC,Mid-Market
+1107,Sofia Mabaso,sofia.mabaso@globex.net,1524.28,LATAM,SMB
+1108,Arjun Silva,arjun.silva@initech.org,6701,EMEA,Enterprise
+1109,Elena Ricci,elena.ricci@umbrella.co,5528,AMER,Mid-Market
+1110,Joon Park,joon.park@soylent.dev,4405.12,APAC,SMB
+1111,Mira Khan,mira.khan@hooli.com,1225,LATAM,Enterprise
+1112,Felix Rossi,felix.rossi@example.com,6963,EMEA,Mid-Market
+1113,Zara Farah,zara.farah@acme.co.uk,5427,AMER,SMB
+1114,Andre Iyer,andre.iyer@northwind.io,3296,APAC,Enterprise
+1115,Noor Rahman,noor.rahman@globex.net,2843.58,LATAM,Mid-Market
+1116,Piotr Tanaka,piotr.tanaka@initech.org,5974.27,EMEA,SMB
+1117,Ayesha Mensah,ayesha.mensah@umbrella.co,449,AMER,Enterprise
+1118,Lucas Moreau,lucas.moreau@soylent.dev,6364.68,APAC,Mid-Market
+1119,Thandi Aziz,thandi.aziz@hooli.com,5788,LATAM,SMB
+1120,Priya Sharma,priya.sharma@example.com,2035,EMEA,Enterprise
+1121,Marcus Haddad,marcus.haddad@acme.co.uk,6063.6,AMER,Mid-Market
+1122,Yuki Asante,yuki.asante@northwind.io,4155,APAC,SMB
+1123,Amara Nair,amara.nair@globex.net,9348,LATAM,Enterprise
+1124,Tomas Pereira,tomas.pereira@initech.org,734.77,EMEA,Mid-Market
+1125,Ingrid Dubois,ingrid.dubois@umbrella.co,3411.28,AMER,SMB
+1126,Rafael Volkov,rafael.volkov@soylent.dev,4712,APAC,Enterprise
+1127,Nadia Kowalski,nadia.kowalski@hooli.com,4878.72,LATAM,Mid-Market
+1128,Oliver Nowak,oliver.nowak@example.com,5896,EMEA,SMB
+1129,Fatima Bergstrom,fatima.bergstrom@acme.co.uk,2349.76,AMER,Enterprise
+1130,Sven Lindqvist,sven.lindqvist@northwind.io,3667,APAC,Mid-Market
+1131,Leila Castro,leila.castro@globex.net,4974.68,LATAM,SMB
+2001,Zero Value,zero@example.com,0,EMEA,SMB
+2002,Refund Case,refund@acme.co.uk,-420,AMER,Enterprise
+2003,Plus Address,billing+invoices@globex.net,1875.25,APAC,SMB
+2004,Deep Subdomain,ops@mail.eu.initech.org,640,EMEA,Mid-Market
+ACME-042,String Identifier,string.id@hooli.com,3120,AMER,Enterprise
+2005,Padded Email, padded.email@example.com ,990,LATAM,SMB
+2006,Padded Sales,padded.sales@soylent.dev,  4500,APAC,Mid-Market
+2007,Renée Dubois-Lapointe,renee@umbrella.co,7310.8,EMEA,Enterprise
+2008,O'Brien Holdings,obrien@northwind.io,15200,AMER,Enterprise
+3001,,missing.name@example.com,500,EMEA,SMB
+3002,   ,blank.name@acme.co.uk,720,AMER,SMB
+3003,No At Sign,nobodyexample.com,410,APAC,SMB
+3004,No Dot Domain,someone@localhost,880,EMEA,Mid-Market
+3005,Space Inside,bad email@example.com,1230,AMER,SMB
+3006,Double At,two@@example.com,640,LATAM,SMB
+3007,Empty Email,,300,APAC,SMB
+3008,Trailing Dot,trailing@example.,750,EMEA,SMB
+3009,Leading At,@example.com,505,AMER,SMB
+3010,Not Available,na.sales@globex.net,N/A,EMEA,Mid-Market
+3011,To Be Confirmed,tbc.sales@initech.org,TBC,APAC,SMB
+3012,Comma Formatted,comma@hooli.com,"1,250",AMER,Enterprise
+3013,Currency Prefix,currency@soylent.dev,$500,EMEA,SMB
+3014,Empty Sales,empty.sales@umbrella.co,,LATAM,SMB
+3015,Words Only,words@northwind.io,pending review,APAC,Mid-Market
+,Missing Identifier,missing.id@example.com,660,EMEA,SMB
+   ,Blank Identifier,blank.id@acme.co.uk,910,AMER,SMB
+1000,Duplicate Of First,dupe.first@example.com,1400,EMEA,SMB
+1001,Duplicate Of Second,dupe.second@example.com,2100,AMER,SMB
+1002,Duplicate Of Third,dupe.third@example.com,3300,APAC,SMB
+4001,First Of Pair Bad Email,not-an-email,200,EMEA,SMB
+4001,Second Of Pair Duplicate,second.pair@example.com,350,EMEA,SMB
+4002,,also-bad-email,NaN,APAC,SMB

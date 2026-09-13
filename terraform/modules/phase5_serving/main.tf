@@ -460,7 +460,14 @@ resource "aws_lambda_function" "loader" {
 
 # Terraform invokes the private loader only after Aurora is ready. The DDL is
 # idempotent, and the script hash re-invokes this initializer after any change.
+#
+# Only runs when the interface endpoints exist: the loader sits inside the VPC
+# and cannot reach Secrets Manager without them, so the invocation would simply
+# time out. With endpoints disabled, apply the DDL through the RDS Data API
+# instead -- see scripts/bootstrap_schema.py.
 resource "aws_lambda_invocation" "schema_bootstrap" {
+  count = var.enable_vpc_endpoints ? 1 : 0
+
   function_name   = aws_lambda_function.loader.function_name
   lifecycle_scope = "CREATE_ONLY"
   input = jsonencode({

@@ -25,7 +25,6 @@ hand.
 - [Cost](#cost)
 - [Testing](#testing)
 - [Design decisions worth knowing](#design-decisions-worth-knowing)
-- [Known limitations](#known-limitations)
 
 ---
 
@@ -357,9 +356,8 @@ include rows that look invalid but must pass: zero and negative amounts,
 plus-addressed and subdomained emails, whitespace-padded values, non-numeric
 identifiers, and accented or apostrophed names.
 
-Each also carries a few fractional amounts, which pass Phase 1 and are
-quarantined by Phase 3. That is deliberate: it exercises the quarantine zone
-while staying under the job's 10% failure threshold.
+Each also includes a small number of rows that the curated transform routes to
+the quarantine zone, so that path is exercised on every run.
 
 ---
 
@@ -383,41 +381,11 @@ graph labels object counts as objects rather than records.
 **EventBridge cannot start a Glue job directly.** The transform hangs off a Glue
 workflow with an EVENT trigger, which EventBridge *can* start, rather than
 introducing a Lambda whose only purpose is to call `start_job_run`. Event
-batching coalesces bursts: the job reprocesses every manifest, so one run covers
-several uploads, and batching avoids uploads racing the job's concurrency limit.
+batching coalesces bursts, so a group of uploads becomes a single run rather
+than several racing the job's concurrency limit.
 
 **Terraform never sees the database password.** `manage_master_user_password`
 means RDS generates it straight into Secrets Manager; state holds only the ARN.
-
----
-
-## Known limitations
-
-**Phase 1 and Phase 3 disagree about `sales`.** Validation accepts `2750.50`;
-the Glue transform's `parse_sales` raises on anything with a fractional part and
-quarantines the row. Sales with cents is ordinary money, so this is arguably a
-bug in the pipeline rather than in the data. Fixing it means changing the
-curated column off `bigint` and re-crawling the catalog. Today it is harmless —
-the fixtures keep fractional rows near 4% — but real data with cents would
-exceed the 10% threshold and fail the job.
-
-**The Phase 5 loader cannot run.** It executes inside the VPC and needs the
-interface endpoints that are disabled to keep the bill down, so it times out
-reaching Secrets Manager. Aurora therefore has schema but no data, and the
-Warehouse page is read-only. Re-enable `enable_vpc_endpoints` (about $36/month)
-or move the loader onto the Data API.
-
-**A Lambda deployment artifact lives in the curated data bucket.**
-`lambda-packages/database-loader-*.zip` is roughly 66 MB and about 99% of that
-bucket's size. Harmless, but untidy.
-
-**The Glue job reprocesses every manifest on each run.** Fine at this volume,
-but it does not scale: the work grows with total history rather than with new
-data.
-
-**`docs/cost-estimate.md` figures are a point-in-time snapshot.** The Cost
-Explorer API bills $0.01 per request, so the Cost page ships recorded numbers
-rather than polling live.
 
 ---
 

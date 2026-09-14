@@ -1,665 +1,430 @@
 # StreamForge
 
-**Enterprise Serverless Data Platform**
+A serverless AWS data platform that takes a CSV from a browser upload to a
+queryable analytics dataset, and an operations portal that lets you watch it
+happen without opening the AWS console.
 
-StreamForge is a comprehensive, production-ready AWS data platform demonstrating the complete spectrum of modern cloud data engineering capabilities. From event-driven CSV ingestion to a relational serving layer, StreamForge implements a secure, scalable lakehouse architecture with automated quality validation, business transformations, and relational serving.
+Upload a file and it is validated row by row, split into clean and rejected
+outputs, transformed into partitioned Parquet, catalogued for Athena, and
+surfaced on twelve pages covering the lake, the warehouse, lineage, monitoring
+and cost. Every hop is event-driven; nothing polls and nothing is started by
+hand.
 
-The platform showcases:
-- **Event-driven data ingestion** with quality gates and lineage tracking
-- **Lakehouse architecture** combining data lake flexibility with warehouse performance
-- **Automated ETL pipelines** with Glue and Lambda
-- **Relational serving layer** with Aurora PostgreSQL Serverless v2
-- **Enterprise operations portal** covering the lake, warehouse, lineage, analytics and cost
-- **Infrastructure as Code** with Terraform and CI/CD automation
-- **Enterprise security** with KMS encryption, least-privilege IAM, and private networking
-- **Comprehensive observability** with CloudWatch dashboards, alarms, and SNS notifications
+**Live:** https://d27fbjnqnw3vzk.cloudfront.net (Cognito sign-in required)
 
-The project is implemented through six phases:
+---
 
-1. **Ingestion and quality** — EventBridge-driven Lambda validation, clean and
-   rejected outputs, plus a lineage manifest for every upload.
-2. **Query foundation** — Glue crawler/Data Catalog and encrypted Athena
-   workgroups for the clean layer.
-3. **Business curation** — Glue transforms clean CSV into partitioned
-   Parquet/Snappy, enriches lineage, applies business rules, and quarantines
-   malformed transformed rows.
-4. **Platform engineering** — Terraform, CI/CD, GitHub OIDC, SSE-KMS,
-   observability, operational runbooks, dashboard security, and recovery
-   guidance.
-5. **Serving layer** — Aurora PostgreSQL Serverless v2 database with automated
-   loading from curated Parquet, idempotent MERGE operations, audit framework,
-   and production-ready indexed transactional tables.
-6. **Enterprise portal** — The upload console extended into a full operations
-   portal: dashboard, data lake explorer, warehouse, analytics, lineage graph,
-   metadata search, monitoring, cost and architecture, so the whole platform can
-   be understood without opening the AWS console.
+## Contents
 
-## Architecture Overview
+- [What it does](#what-it-does)
+- [The portal](#the-portal)
+- [Phases](#phases)
+- [Repository layout](#repository-layout)
+- [Running it](#running-it)
+- [Deploying](#deploying)
+- [Cost](#cost)
+- [Testing](#testing)
+- [Design decisions worth knowing](#design-decisions-worth-knowing)
+- [Known limitations](#known-limitations)
 
-StreamForge implements a complete data platform architecture spanning ingestion, transformation, serving, and validation:
+---
+
+## What it does
 
 ```text
-┌─────────────────────────────────────────────────────────────────────┐
-│                         StreamForge Platform                        │
-└─────────────────────────────────────────────────────────────────────┘
-
-┌─────────────────── Data Ingestion (Phase 1-3) ────────────────────┐
-│                                                                     │
-│  CloudFront Dashboard → API Gateway → S3 (Raw Zone)                │
-│                                          ↓                          │
-│                                   EventBridge                       │
-│                                          ↓                          │
-│                                  Lambda Validator                   │
-│                                    ↓           ↓                    │
-│                            Clean S3      Rejected S3                │
-│                                    ↓                                │
-│                              Glue Crawler                           │
-│                                    ↓                                │
-│                                Glue ETL                             │
-│                                    ↓                                │
-│                        Curated Parquet S3 (Lakehouse)               │
-│                                    ↓                                │
-│                              Athena Queries                         │
-└─────────────────────────────────────────────────────────────────────┘
-
-┌─────────────────── Serving Layer (Phase 5) ────────────────────────┐
-│                                                                     │
-│  Curated Parquet → EventBridge → Lambda Loader → Aurora PostgreSQL │
-│                                                         ↓           │
-│                                                   Applications      │
-│                                                   Dashboards        │
-│                                                   APIs              │
-└─────────────────────────────────────────────────────────────────────┘
-
-┌─────────────── Enterprise Portal (Phase 6) ────────────────────────┐
-│                                                                     │
-│   CloudFront + WAF → Cognito (PKCE) → API Gateway (JWT)             │
-│                              ↓                                      │
-│                    dashboard_api / portal_api                       │
-│                              ↓                                      │
-│   ┌──────────┬──────────┬──────────┬──────────┬─────────────┐      │
-│   S3 zones   Manifests   Glue/Athena  CloudWatch   Aurora           │
-│   ┌──────────┴──────────┴──────────┴──────────┴─────────────┐      │
-│                              ↓                                      │
-│   12 pages: dashboard, pipeline, upload, lake, warehouse,           │
-│   analytics, lineage, metadata, monitoring, cost, architecture,     │
-│   infrastructure                                                    │
-└─────────────────────────────────────────────────────────────────────┘
-
-┌────────── Platform Engineering (Phase 4) ──────────────────────────┐
-│                                                                     │
-│  • Terraform Infrastructure as Code                                │
-│  • GitHub Actions CI/CD with OIDC                                  │
-│  • KMS Encryption (at rest and in transit)                         │
-│  • CloudWatch Monitoring & SNS Alerts                              │
-│  • WAF Protection & Private Networking                             │
-│  • Secrets Manager for Credentials                                 │
-└─────────────────────────────────────────────────────────────────────┘
+   Browser
+      │  presigned PUT (no AWS credentials in the page)
+      ▼
+  ┌────────────┐   EventBridge    ┌──────────────────┐
+  │  S3 raw    │─────────────────▶│ Phase 1 Lambda   │  validate + split
+  └────────────┘  Object Created  └────────┬─────────┘
+                                           │
+                    ┌──────────────────────┼──────────────────────┐
+                    ▼                      ▼                      ▼
+              ┌───────────┐         ┌────────────┐        ┌──────────────┐
+              │ S3 clean  │         │S3 rejected │        │ S3 metadata  │
+              └─────┬─────┘         └────────────┘        │  (manifest)  │
+                    │ EventBridge                         └──────────────┘
+                    ▼
+             ┌──────────────┐   Glue workflow + EVENT trigger
+             │  Glue ETL    │   business transforms, Parquet
+             └──────┬───────┘
+                    │
+          ┌─────────┴─────────┐
+          ▼                   ▼
+    ┌────────────┐     ┌───────────────┐
+    │ S3 curated │     │ S3 quarantine │  reason=invalid_sales/...
+    │  Parquet   │     └───────────────┘
+    └─────┬──────┘
+          │
+          ▼
+     ┌─────────┐        ┌──────────────────────┐
+     │ Athena  │        │ Aurora PostgreSQL    │  schema deployed,
+     └─────────┘        │ (Serverless v2)      │  read-only from the portal
+                        └──────────────────────┘
 ```
 
-See [the architecture document](docs/architecture.md) for more detail.
+Validation answers *"is this row well formed?"* and produces the CSVs you
+download. Glue answers *"make it useful to query"* and produces the Parquet
+Athena reads. They are different layers with different jobs, and Glue is the
+stricter of the two.
 
-## Implementation Status
+### The five validation rules
 
-| Phase | Capability | Status | Details |
-| ----- | ---------- | ------ | ------- |
-| **Phase 1** | CSV Ingestion & Validation | ✅ Complete | EventBridge-driven Lambda validation with clean/rejected outputs and metadata lineage |
-| **Phase 2** | Query Foundation | ✅ Complete | Glue Data Catalog, Athena workgroups, encrypted query results |
-| **Phase 3** | Business Curation | ✅ Complete | Glue ETL transformations, Parquet conversion, partitioning, quarantine handling |
-| **Phase 4** | Platform Engineering | ✅ Complete | Terraform IaC, GitHub Actions CI/CD with OIDC, KMS encryption, CloudWatch monitoring, SNS alerts |
-| **Phase 5** | Serving Layer | ✅ Complete | Aurora PostgreSQL Serverless v2, automated Parquet loading, audit framework, idempotent MERGE operations |
-| **Phase 6** | Enterprise Portal | ✅ Complete | Twelve-page operations portal over the live platform: lake explorer, warehouse, analytics, lineage, metadata, monitoring, cost and architecture |
+A row reaches the clean zone only if all five hold:
 
-### Key Achievements
+| Rule | Rejected when |
+|---|---|
+| `customer_id` present | blank or whitespace only |
+| `name` present | blank or whitespace only |
+| `email` well formed | fails `^[^@\s]+@[^@\s]+\.[^@\s]+$` |
+| `sales` numeric | not parseable as a number |
+| `customer_id` unique | a later duplicate; the first occurrence is kept |
 
-- **10,000+ lines of code** across Python, SQL, HCL (Terraform), and configuration
-- **50+ AWS resources** provisioned and managed via Infrastructure as Code
-- **100% serverless** architecture with automatic scaling
-- **Zero-trust security** model with least-privilege IAM and private networking
-- **Complete observability** with CloudWatch dashboards, logs, and alarms
-- **Production-ready** with CI/CD, automated testing, and disaster recovery procedures
+Extra columns are dropped: only `customer_id`, `name`, `email` and `sales`
+survive into the clean output.
 
-The current development dashboard is available at
-[https://d27fbjnqnw3vzk.cloudfront.net](https://d27fbjnqnw3vzk.cloudfront.net).
-It requires a Cognito user account.
+---
 
-## Services
+## The portal
 
-- Amazon S3
-- Amazon EventBridge
-- AWS Lambda (Python 3.12)
-- Amazon CloudWatch Logs
-- AWS Glue Data Catalog
-- AWS Glue Crawler
-- Amazon Athena
-- Amazon Aurora PostgreSQL Serverless v2
-- AWS Key Management Service (KMS)
-- Amazon CloudFront
-- Amazon Cognito
-- Amazon API Gateway
-- AWS WAF
-- Amazon SNS and Amazon SQS
-- AWS IAM and GitHub Actions OIDC
-- AWS Secrets Manager
-- Terraform
+Twelve pages, built as plain ES modules with no build step and no
+`node_modules`.
 
-## Infrastructure, security, and operations
+| Page | Reads |
+|---|---|
+| **Dashboard** | Platform totals and daily processing, from the lineage manifests |
+| **Pipeline** | Component health and the most recent batches |
+| **Upload** | The original console, plus a live processing timeline |
+| **Data Lake** | All seven S3 zones, browsable to the object, with partitions |
+| **Warehouse** | Aurora schemas, tables and columns via the RDS Data API |
+| **Analytics** | Revenue, categories and top customers, via Athena over curated Parquet |
+| **Lineage** | Interactive graph; selecting a stage shows its inputs, outputs and rules |
+| **Metadata** | Searchable, filterable, paginated view of every batch manifest |
+| **Monitoring** | CloudWatch Lambda metrics and alarm state |
+| **Cost** | Measured spend by service, and what each decision would add |
+| **Architecture** | Six zoomable diagrams: platform, lake, serving, CI/CD, security, monitoring |
+| **Infrastructure** | Each service mapped to the Terraform module that creates it |
 
-Terraform is the source of truth for the deployed development environment:
+The upload timeline polls `GET /api/etl` for the real Glue run state, so the
+Glue and Curated stages reflect what actually happened rather than sitting grey.
 
-- `terraform/bootstrap/backend`
-- `terraform/environments/dev`
-- `terraform/modules/kms`
-- `terraform/modules/s3`
-- `terraform/modules/phase1_runtime`
-- `terraform/modules/phase2_analytics`
-- `terraform/modules/phase3_curated`
+### API
 
-It manages KMS/S3, the Phase 1 runtime, Phase 2 analytics, Phase 3 curated
-layers, the dashboard, encrypted alerting, dead-letter queues, CloudWatch
-alarms/dashboards, and incident runbooks. See the
-[Terraform import guide](docs/terraform-import-guide.md) and
-[monitoring flow](docs/diagrams/monitoring-flow.md).
+All routes sit behind the same Cognito JWT authorizer. Nothing is public.
 
-Phase 4 also includes [CI/CD and promotion guidance](docs/github-environments.md),
-[disaster-recovery assumptions](docs/disaster-recovery.md), and a
-[definition of done](docs/definition-of-done.md).
+| Route | Purpose |
+|---|---|
+| `POST /uploads` | Issue a presigned PUT for the raw bucket |
+| `GET /status` | Phase 1 result for one upload |
+| `GET /api/dashboard` | Aggregated manifest totals and daily series |
+| `GET /api/storage` | Per-zone totals, or a listing when `?zone=` is given |
+| `GET /api/metadata` | Manifests, filtered and paginated |
+| `GET /api/lineage` | The pipeline graph with real counts |
+| `GET /api/metrics` | CloudWatch metrics and alarm state |
+| `GET /api/pipeline` | Component health and recent batches |
+| `GET /api/analytics` | Athena aggregates over the curated table |
+| `GET /api/warehouse` | Aurora schema via the RDS Data API |
+| `GET /api/etl` | Glue run state, for the upload timeline |
 
-## Phase 5 serving layer
+`dashboard_api.py` owns the upload path and delegates every `GET /api/*` route
+to `portal_api.py`, which is kept separate so the upload path stays small and
+easy to review.
 
-Phase 5 adds an automated relational **serving layer**: curated Parquet is
-loaded into an Amazon Aurora PostgreSQL (Serverless v2) database so dashboards,
-applications, and reporting can query production-ready, indexed, transactional
-tables. After a complete Phase 3 batch is written, Glue creates a batch manifest
-and emits a `Curated Batch Ready` EventBridge event. The database loader reads
-that manifest, verifies its checksum, and runs a staging → validate → MERGE →
-audit workflow inside one transaction, idempotently by batch.
-Terraform packages the idempotent schema scripts with that private loader and
-invokes a bootstrap after Aurora is ready; no public database access or manual
-`psql` setup is required.
+---
 
-Key pieces:
+## Phases
 
-- `database/` — schema, indexes, constraints (schemas `staging`, `analytics`, `audit`).
-- `sql/` — `merge.sql`, `validation.sql`, `audit_queries.sql`.
-- `lambda/database_loader/` — the pg8000/DuckDB loader (`handler`, `loader`, `db`).
-- `terraform/modules/phase5_serving/` — private VPC + endpoints, Aurora
-  Serverless v2, in-VPC loader, IAM, EventBridge, CloudWatch alarms/dashboard,
-  reusing the Phase 4 SNS topic. Wired into `terraform/environments/dev`.
+| Phase | Capability | What it added |
+|---|---|---|
+| **1** | Ingestion and quality | EventBridge-driven Lambda validation, clean/rejected outputs, a lineage manifest per batch |
+| **2** | Query foundation | Glue crawler, Data Catalog, encrypted Athena workgroups |
+| **3** | Business curation | Glue ETL, Parquet conversion, partitioning, quarantine zone |
+| **4** | Platform engineering | Terraform, GitHub Actions with OIDC, KMS, CloudWatch, SNS, runbooks |
+| **5** | Serving layer | Aurora PostgreSQL Serverless v2, loader Lambda, audit tables, private VPC |
+| **6** | Enterprise portal | The twelve-page operations portal, and automatic ETL triggering |
 
-Highlights: idempotent/incremental loading keyed on the batch id, transaction
-rollback with no partial loads, per-record error capture to `audit.load_errors`,
-Secrets Manager credentials, KMS encryption, and structured JSON logging. Build
-the loader archive with `python scripts/package_lambdas.py --environment dev
---include-loader`.
+Phase 6 originally scoped an Oracle to PostgreSQL migration using DMS and SCT.
+That was removed; the decommission is commit `72ec5b7`. What remains under
+`migration/` is a standalone Aurora data-integrity validation suite that stands
+on its own.
 
-See the [database architecture](docs/database-architecture.md),
-[ADR 005](docs/adr/005-aurora-serverless-v2-serving-layer.md), and the
-[loader runbook](docs/runbooks/phase5-database-loader.md).
+---
 
-## Phase 6 enterprise portal
+## Repository layout
 
-Phase 6 turns the CSV upload console into the portal that demonstrates the whole
-platform without opening the AWS console. The upload page is unchanged; a
-sidebar and hash router were added around it, and eleven further pages were
-built alongside.
+```text
+web/                    The portal. Plain ES modules, no build step.
+  index.html            Shell, nav, and the original upload console
+  app.js                Upload logic and session handling
+  router.js             Hash router, lazily imports each page
+  api.js  ui.js         Fetch wrapper; DOM builders, tables, formatters
+  charts.js  flow.js    Hand-built SVG charts; layered flow diagrams
+  timeline.js           Upload timeline, polls real Glue state
+  pages/*.js            One module per page
 
-| Page | What it shows |
-| --- | --- |
-| Dashboard | Platform totals and daily processing, from the lineage manifests |
-| Pipeline | Component health and the most recent batches |
-| Upload | The original console, plus a processing timeline |
-| Data Lake | All seven S3 zones, browsable to the object, with partitions |
-| Warehouse | Aurora schemas, tables and columns via the RDS Data API |
-| Analytics | Revenue, categories and top customers, via Athena over curated Parquet |
-| Lineage | Interactive graph; selecting a stage shows its inputs, outputs and rules |
-| Metadata | Searchable, filterable, paginated view of every batch manifest |
-| Monitoring | CloudWatch Lambda metrics and alarm state |
-| Cost | Measured spend by service, and what each future decision would add |
-| Architecture | Six zoomable diagrams: platform, lake, serving, CI/CD, security, monitoring |
-| Infrastructure | Each service mapped to the Terraform module that creates it |
+dashboard_api.py        Upload API: presigned PUT and status
+portal_api.py           Read-only GET /api/* handlers
 
-### Structure
+lambda/                 Phase 1 validator and the Phase 5 database loader
+jobs/                   Phase 3 Glue transform and its helpers
+database/               Aurora DDL: schema, indexes, constraints
+migration/              Aurora data-integrity validation suite
 
-- `web/router.js` — hash router; each page is a lazily imported module
-- `web/pages/*.js` — one module per page
-- `web/api.js` — fetch wrapper reusing the session handling in `app.js`
-- `web/ui.js` — DOM builders, tables, states, formatters
-- `web/charts.js` — hand-built SVG charts
-- `web/flow.js` — layered flow diagrams for Architecture and Lineage
-- `portal_api.py` — the read-only `GET /api/*` handlers
-- `dashboard_api.py` — unchanged upload path, delegating portal routes
+terraform/
+  environments/dev      The composed environment
+  modules/              kms, s3, phase1_runtime, phase2_analytics,
+                        phase3_curated, phase4_operations, phase5_serving,
+                        web_console, web_static, github_actions_oidc
 
-### Constraints worth knowing
+scripts/
+  run_local.py          Run the Phase 1 pipeline against local folders
+  local_server.py       Serve the whole portal with no AWS account
+  package_lambdas.py    Build the deployment archives Terraform consumes
+  bootstrap_schema.py   Apply the Aurora DDL via the RDS Data API
 
-The CloudFront CSP is `default-src 'self'`, which rules out a CDN chart library
-and every form of inline script or style. Charts are therefore hand-built SVG
-and diagrams are DOM, all constructed with `createElement`. There is no build
-step and no `node_modules`.
+sample_data/            Test fixtures (see Testing)
+docs/                   Architecture, ADRs, runbooks, cost, diagrams
+```
 
-Chart colours were validated rather than chosen. Green and red for valid versus
-rejected scores ΔE 2.5 under deuteranopia — indistinguishable — so the shipped
-pair scores 17.3 instead. The palettes and the command to re-check them are
-documented at the top of `web/charts.js`.
+---
 
-Pages report honestly when a dependency is missing: the Warehouse page states
-that Phase 5 is not deployed rather than showing an invented schema, and the
-lineage graph labels object counts as objects rather than records.
+## Running it
 
-### Running it locally
+Three modes, in order of how much AWS they need.
 
-`scripts/local_server.py` serves the portal against `local_buckets/` with no
-AWS account, by running the real `portal_api` handlers over a local S3 shim.
-Endpoints that genuinely need AWS — CloudWatch, Athena, Aurora — report as
-unavailable rather than returning fabricated data.
+### 1. The deployed portal — nothing to run
+
+https://d27fbjnqnw3vzk.cloudfront.net
+
+Sign in with a Cognito user. To set a password:
 
 ```bash
-python scripts/local_server.py     # http://localhost:8000
+POOL=$(aws cognito-idp list-user-pools --max-results 10 \
+  --query "UserPools[?contains(Name,'streamforge')].Id" --output text)
+aws cognito-idp admin-set-user-password --user-pool-id "$POOL" \
+  --username <your-email> --password '<12+ chars, mixed case, digit, symbol>' --permanent
 ```
 
-## Web dashboard
+### 2. Local page, real AWS backend
 
-The dashboard provides authenticated CSV upload, processing status, row-level
-counts, and expiring download links for clean and rejected output. In `dev` it
-is delivered over HTTPS through CloudFront from a private, versioned S3 bucket.
-CloudFront uses Origin Access Control; the bucket remains private and its
-objects are encrypted with the project KMS key.
-
-Retrieve the deployed dashboard URL with:
-
-```powershell
-terraform -chdir=terraform/environments/dev output -raw web_dashboard_url
-```
-
-For local UI work, serve the `web` directory at the configured localhost
-origin:
-
-```powershell
+```bash
 python -m http.server 8000 --directory web
 ```
 
-The CloudFront deployment generates its own non-secret `config.js` from
-[`web/config.template.js`](web/config.template.js), so the deployed callback
-URL always matches the distribution.
+Port **8000** exactly — it is registered in the Cognito callback URLs, the API
+Gateway CORS allow-list and the raw bucket's CORS rules. `web/config.js` already
+points at the deployed API, so the page talks to real infrastructure.
 
-## Local setup
-
-```powershell
-py -3.12 -m venv .venv
-.\.venv\Scripts\Activate.ps1
-python -m pip install -r requirements-dev.txt
-python -m pytest
-```
-
-## Sample input
-
-`sample_data/customers.csv`:
-
-```text
-customer_id,name,email,sales
-101,John,john@gmail.com,500
-102,,mary@gmail.com,600
-103,Sam,samgmail.com,700
-104,Raj,raj@gmail.com,1000
-```
-
-## Sample output
-
-Clean bucket (`sample_data/expected_clean.csv`):
-
-```text
-customer_id,name,email,sales
-101,John,john@gmail.com,500
-104,Raj,raj@gmail.com,1000
-```
-
-Rejected bucket (`sample_data/expected_rejected.csv`) — row 102 has no name and
-row 103 has an invalid email:
-
-```text
-customer_id,name,email,sales
-102,,mary@gmail.com,600
-103,Sam,samgmail.com,700
-```
-
-The handler returns processing statistics:
-
-```json
-{ "total_records": 4, "valid_records": 2, "invalid_records": 2 }
-```
-
-Phase 1 also writes a manifest JSON for each processed file. The recommended
-layout uses a separate metadata bucket so analytics jobs can enrich rows without
-changing the clean CSV schema:
-
-```text
-clean/customers.csv
-rejected/customers.csv
-metadata/customers.csv.json
-```
-
-## Run locally (no AWS)
-
-You can exercise the full validation/cleaning flow without deploying anything.
-`scripts/run_local.py` uses local folders under `local_buckets/` in place of the
-raw, clean, rejected, and metadata buckets.
-
-```powershell
-# "Upload" a CSV by dropping it into the raw folder
-mkdir local_buckets\raw
-copy sample_data\customers.csv local_buckets\raw\
-
-# Run the pipeline (processes every CSV in local_buckets/raw/)
-.\.venv\Scripts\python.exe scripts\run_local.py
-```
-
-Results appear in `local_buckets\clean\` and `local_buckets\rejected\`, and the
-processing statistics are logged to the console. You can also target one file:
-`python scripts\run_local.py sample_data\customers.csv`.
-
-## Legacy manual deployment reference (AWS Phase 1)
-
-Terraform is the supported provisioning path for StreamForge. The CLI steps
-below are retained as a learning reference for the original Phase 1 build; do
-not use them to change the Terraform-managed development environment.
-
-The original Phase 1 build used the AWS CLI. Pick **globally unique** bucket
-names if following these historical instructions. Commands are shown in bash —
-adjust variable syntax if you run them from PowerShell. The current
-implementation also uses a metadata bucket for Phase 1 manifests.
-
-> One-command option: steps 1–5 are bundled in `scripts/deploy.sh` (idempotent).
-> Run it, then do step 6 to test:
->
-> ```bash
-> RAW=dataflow-raw-you CLEAN=dataflow-clean-you REJECTED=dataflow-rejected-you \
->   METADATA=dataflow-metadata-you \
->   REGION=us-east-1 bash scripts/deploy.sh
-> ```
-
-### 0. Prerequisites
+### 3. Fully local, no AWS account
 
 ```bash
-aws --version                        # AWS CLI v2
-aws configure                        # access key, secret, default region
-aws sts get-caller-identity          # confirm you are authenticated
-
-# Reusable variables
-REGION=us-east-1
-ACCOUNT_ID=$(aws sts get-caller-identity --query Account --output text)
-RAW=dataflow-raw-you
-CLEAN=dataflow-clean-you
-REJECTED=dataflow-rejected-you
-METADATA=dataflow-metadata-you
+python scripts/local_server.py        # http://localhost:8000
 ```
 
-### 1. Create the buckets
+Stands in for Cognito, API Gateway and S3 presigned URLs from a single origin,
+so there is no CORS to configure. Sign-in is stubbed: clicking "Sign in" logs
+you straight in. Uploads run through the *real* validator via
+`scripts/run_local.py`, and the portal endpoints run the *real* `portal_api`
+handlers against `local_buckets/`. Endpoints that genuinely need AWS —
+CloudWatch, Athena, Aurora — report as unavailable rather than returning
+fabricated data.
+
+The stubbed authentication is for local development and must never be deployed.
+
+### Pipeline only, no UI
 
 ```bash
-# us-east-1 takes NO LocationConstraint; every other region requires it.
-aws s3api create-bucket --bucket $RAW      --region $REGION
-aws s3api create-bucket --bucket $CLEAN    --region $REGION
-aws s3api create-bucket --bucket $REJECTED --region $REGION
-aws s3api create-bucket --bucket $METADATA --region $REGION
+python scripts/run_local.py sample_data/subscribers.csv
 ```
 
-Enable EventBridge notifications on the raw bucket (this is what makes uploads
-emit events — the most commonly missed step):
+Outputs land in `local_buckets/{clean,rejected,metadata}/`.
+
+---
+
+## Deploying
+
+Terraform is the only supported path. Apply is manual and environment-gated;
+pull requests plan but never apply.
 
 ```bash
-aws s3api put-bucket-notification-configuration --bucket $RAW \
-  --notification-configuration '{"EventBridgeConfiguration":{}}'
+# 1. Build the Lambda archives. They are gitignored and Terraform will not
+#    apply without them.
+python scripts/package_lambdas.py --environment dev --include-dashboard --include-loader
+
+# 2. Backend config, gitignored, one per environment
+cd terraform/environments/dev
+cp backend.hcl.example backend.hcl        # fill in the account id
+
+# 3. terraform.tfvars, gitignored. owner and cost_center are the only
+#    required values, but an existing environment also needs the adoption
+#    overrides -- see terraform.tfvars.example. Without bucket_name_overrides
+#    the module's default naming does not match deployed buckets and every
+#    data bucket is destroyed and recreated.
+cp terraform.tfvars.example terraform.tfvars
+
+terraform init -backend-config=backend.hcl
+terraform plan        # read this before applying
+terraform apply
 ```
 
-### 2. Package the function
+### Credentials
 
-pandas and boto3 exceed the inline editor limit, so ship them in the ZIP:
+If `aws login` sessions are short in your account, Terraform's Go SDK may not
+understand the `login_session` format at all. Export resolved credentials first:
 
 ```bash
-rm -rf build function.zip
-pip install -r lambda/requirements.txt -t build/
-cp lambda/handler.py lambda/validator.py lambda/metadata.py build/
-cd build && zip -r ../function.zip . && cd ..
+aws configure export-credentials --format env > /tmp/creds.env
+set -a; . /tmp/creds.env; set +a
 ```
 
-`handler.py` and `validator.py` sit at the ZIP root (flat layout), so the handler
-entry point is `handler.lambda_handler`.
-
-### 3. Create the IAM role
+A full apply that provisions Aurora can outlast a short-lived token. If it dies
+mid-apply, Terraform writes `errored.tfstate`; push it back before retrying,
+otherwise Terraform loses track of resources that exist:
 
 ```bash
-# Trust policy so Lambda can assume the role
-aws iam create-role --role-name streamforge-lambda-role \
-  --assume-role-policy-document '{"Version":"2012-10-17","Statement":[{"Effect":"Allow","Principal":{"Service":"lambda.amazonaws.com"},"Action":"sts:AssumeRole"}]}'
-
-# CloudWatch Logs permissions
-aws iam attach-role-policy --role-name streamforge-lambda-role \
-  --policy-arn arn:aws:iam::aws:policy/service-role/AWSLambdaBasicExecutionRole
-
-# Read raw, write clean/rejected/metadata
-aws iam put-role-policy --role-name streamforge-lambda-role \
-  --policy-name streamforge-s3 \
-  --policy-document "{\"Version\":\"2012-10-17\",\"Statement\":[
-    {\"Effect\":\"Allow\",\"Action\":\"s3:GetObject\",\"Resource\":\"arn:aws:s3:::$RAW/*\"},
-    {\"Effect\":\"Allow\",\"Action\":\"s3:PutObject\",\"Resource\":[\"arn:aws:s3:::$CLEAN/*\",\"arn:aws:s3:::$REJECTED/*\",\"arn:aws:s3:::$METADATA/*\"]}
-  ]}"
+terraform force-unlock -force <lock-id>
+terraform state push errored.tfstate
 ```
 
-Wait ~10 seconds for the role to propagate before the next step.
+### Aurora schema
 
-### 4. Deploy the Lambda
+The loader Lambda normally applies the DDL from inside the VPC, which requires
+interface endpoints. With those disabled, use the Data API instead:
 
 ```bash
-aws lambda create-function \
-  --function-name streamforge-processor \
-  --runtime python3.12 \
-  --handler handler.lambda_handler \
-  --role arn:aws:iam::$ACCOUNT_ID:role/streamforge-lambda-role \
-  --zip-file fileb://function.zip \
-  --timeout 60 --memory-size 256 \
-  --environment "Variables={CLEAN_BUCKET=$CLEAN,REJECTED_BUCKET=$REJECTED,METADATA_BUCKET=$METADATA,METADATA_PREFIX=metadata,PHASE1_PIPELINE_VERSION=1.1.0}"
+python scripts/bootstrap_schema.py
 ```
 
-Those environment variables tell the handler where to write and which Phase 1
-version stamp to place in the manifest. Update later deploys with
-`aws lambda update-function-code --function-name streamforge-processor
---zip-file fileb://function.zip`.
+Idempotent; "already exists" is treated as success.
 
-### 5. Wire the EventBridge rule
+---
+
+## Cost
+
+Measured from Cost Explorer, not estimated. August 2026 gross usage was
+**$11.74**, fully absorbed by credits.
+
+| Service | Cost | Note |
+|---|---:|---|
+| AWS WAF | $7.00 | Web ACL on CloudFront, $5/month before a single request |
+| KMS | $2.00 | Two customer-managed keys |
+| Aurora Serverless v2 | ~$1–3 | `min_capacity = 0`, idles to zero |
+| S3, Lambda, Glue, Athena, API Gateway, CloudFront, Cognito | ~$0.00 | Inside the free tier at this volume |
+
+Two decisions keep the serving layer cheap:
+
+- **`min_capacity = 0` with auto-pause.** The default 0.5 ACU floor bills
+  continuously, roughly $45/month for an idle cluster. Scale-to-zero needs
+  Aurora PostgreSQL 16.3 or newer; the module defaults to 17.7.
+- **The RDS Data API instead of in-VPC access.** Callers reach Aurora over IAM
+  without sitting inside the VPC, so the read path needs none of the five
+  interface endpoints at ~$7.30/month each. `enable_vpc_endpoints` is off by
+  default in dev.
+
+Together these take the serving layer from about $81/month to the cost of
+Aurora alone. The VPC, subnets and security groups were never the expense.
+
+Full detail and the command to refresh these figures: [docs/cost-estimate.md](docs/cost-estimate.md).
+
+---
+
+## Testing
 
 ```bash
-aws events put-rule --name streamforge-raw-uploads --region $REGION \
-  --event-pattern "{\"source\":[\"aws.s3\"],\"detail-type\":[\"Object Created\"],\"detail\":{\"bucket\":{\"name\":[\"$RAW\"]}}}"
-
-aws lambda add-permission --function-name streamforge-processor \
-  --statement-id eventbridge-invoke --action lambda:InvokeFunction \
-  --principal events.amazonaws.com \
-  --source-arn arn:aws:events:$REGION:$ACCOUNT_ID:rule/streamforge-raw-uploads
-
-aws events put-targets --rule streamforge-raw-uploads --region $REGION \
-  --targets "Id=1,Arn=arn:aws:lambda:$REGION:$ACCOUNT_ID:function:streamforge-processor"
+node --test web/app.test.js web/ui.test.mjs   # 22 tests, no dependencies
+python migration/tests/test_migration.py      # 6 tests
+terraform -chdir=terraform/environments/dev validate
 ```
 
-### 6. Upload a CSV and verify
+The JS tests load browser code into a `node:vm` context with stubbed globals, so
+they need no jsdom and no install. The migration tests stub `boto3` and `pg8000`
+for the same reason.
 
-```bash
-aws s3 cp sample_data/customers.csv s3://$RAW/customers.csv
+### Fixtures
 
-# After a few seconds:
-aws s3 ls s3://$CLEAN/           # customers.csv appears
-aws s3 ls s3://$REJECTED/        # customers.csv appears
-aws s3 ls s3://$METADATA/metadata/   # customers.csv.json appears
-aws s3 cp s3://$CLEAN/customers.csv -      # rows 101, 104
-aws s3 cp s3://$REJECTED/customers.csv -   # rows 102, 103
-aws s3 cp s3://$METADATA/metadata/customers.csv.json -  # manifest metadata
+| File | Rows | Phase 1 | Phase 3 |
+|---|---:|---|---|
+| `customers.csv` | 4 | 2 valid / 2 rejected | — |
+| `customers_sim.csv` | 22 | 8 valid / 14 rejected | — |
+| `customers_large.csv` | 169 | 146 valid / 23 rejected | 141 curated / 5 quarantined |
+| `subscribers.csv` | 209 | 184 valid / 25 rejected | 177 curated / 7 quarantined |
 
-# Processing statistics
-aws logs tail /aws/lambda/streamforge-processor --follow
-```
+The two larger fixtures are deliberately unalike — different identifier schemes,
+name pools, domains and extra columns — so batches are easy to tell apart in the
+lineage and metadata views. Both exercise all five validation rules, and both
+include rows that look invalid but must pass: zero and negative amounts,
+plus-addressed and subdomained emails, whitespace-padded values, non-numeric
+identifiers, and accented or apostrophed names.
 
-You should see `Total Records: 4 / Valid Records: 2 / Invalid Records: 2`.
+Each also carries a few fractional amounts, which pass Phase 1 and are
+quarantined by Phase 3. That is deliberate: it exercises the quarantine zone
+while staying under the job's 10% failure threshold.
 
-### Troubleshooting
+---
 
-- **`BucketAlreadyExists`** — bucket names are global; choose something more unique.
-- **First upload does nothing** — confirm the EventBridge notification config in
-  step 1 was applied to the raw bucket.
-- **`AccessDenied` writing outputs** — recheck the inline S3 policy in step 3.
-- **Cleanup** — to avoid charges, delete the function, rule, and role, then empty
-  and delete the four buckets.
+## Design decisions worth knowing
 
-## Deployment (AWS Phase 2)
+**The portal has no build step.** The CloudFront response headers policy sets
+`default-src 'self'` with no `unsafe-inline`, which rules out CDN scripts,
+Google Fonts, inline `<script>`/`<style>`, and `style` attributes in markup.
+Charts are therefore hand-built SVG and diagrams are DOM, all constructed with
+`createElement`. There is no bundler and no `node_modules`.
 
-Phase 2 keeps the Phase 1 clean bucket as the source of truth and adds:
+**Chart colours were validated, not chosen.** Green and red for valid versus
+rejected scores ΔE 2.5 under deuteranopia — indistinguishable. The shipped pair
+scores 17.3. Palettes and the command to re-check them are documented at the top
+of `web/charts.js`.
 
-- a KMS-encrypted Athena results bucket
-- a Glue database
-- a Glue crawler role and crawler
-- an Athena workgroup
-- a canonical `streamforge_clean_db.customers` table for queries
+**Pages report honestly when a dependency is missing.** The Warehouse page says
+Phase 5 is not deployed rather than showing an invented schema, and the lineage
+graph labels object counts as objects rather than records.
 
-### Prerequisites
+**EventBridge cannot start a Glue job directly.** The transform hangs off a Glue
+workflow with an EVENT trigger, which EventBridge *can* start, rather than
+introducing a Lambda whose only purpose is to call `start_job_run`. Event
+batching coalesces bursts: the job reprocesses every manifest, so one run covers
+several uploads, and batching avoids uploads racing the job's concurrency limit.
 
-Phase 1 must already be deployed, and the clean bucket must contain at least one
-processed CSV file.
+**Terraform never sees the database password.** `manage_master_user_password`
+means RDS generates it straight into Secrets Manager; state holds only the ARN.
 
-The repository includes a PowerShell helper:
+---
 
-```powershell
-.\scripts\deploy_phase2.ps1
-```
+## Known limitations
 
-By default it assumes:
+**Phase 1 and Phase 3 disagree about `sales`.** Validation accepts `2750.50`;
+the Glue transform's `parse_sales` raises on anything with a fractional part and
+quarantines the row. Sales with cents is ordinary money, so this is arguably a
+bug in the pipeline rather than in the data. Fixing it means changing the
+curated column off `bigint` and re-crawling the catalog. Today it is harmless —
+the fixtures keep fractional rows near 4% — but real data with cents would
+exceed the 10% threshold and fail the job.
 
-- Region: `us-east-1`
-- KMS key: `alias/streamforge-phase1`
-- Clean bucket: `streamforge-clean-<account-id>-<region>`
-- Athena results bucket: `streamforge-athena-results-<account-id>-<region>`
-- Glue database: `streamforge_clean_db`
-- Athena workgroup: `streamforge-phase2`
+**The Phase 5 loader cannot run.** It executes inside the VPC and needs the
+interface endpoints that are disabled to keep the bill down, so it times out
+reaching Secrets Manager. Aurora therefore has schema but no data, and the
+Warehouse page is read-only. Re-enable `enable_vpc_endpoints` (about $36/month)
+or move the loader onto the Data API.
 
-You can override any of those values:
+**A Lambda deployment artifact lives in the curated data bucket.**
+`lambda-packages/database-loader-*.zip` is roughly 66 MB and about 99% of that
+bucket's size. Harmless, but untidy.
 
-```powershell
-.\scripts\deploy_phase2.ps1 `
-  -Region us-east-1 `
-  -KmsKeyId alias/streamforge-phase1 `
-  -GlueDatabase streamforge_clean_db `
-  -AthenaWorkgroup streamforge-phase2
-```
+**The Glue job reprocesses every manifest on each run.** Fine at this volume,
+but it does not scale: the work grows with total history rather than with new
+data.
 
-### What the script does
+**`docs/cost-estimate.md` figures are a point-in-time snapshot.** The Cost
+Explorer API bills $0.01 per request, so the Cost page ships recorded numbers
+rather than polling live.
 
-1. Creates and hardens the Athena results bucket with `SSE-KMS`.
-2. Creates the Glue database.
-3. Creates the Glue crawler role with read access to the clean bucket and KMS
-   decrypt access to the project key.
-4. Creates or updates the Glue crawler.
-5. Creates or updates the Athena workgroup with enforced output location and
-   `SSE-KMS` query result encryption.
-6. Runs the crawler.
-7. Creates the canonical `streamforge_clean_db.customers` table.
-8. Verifies the sample Athena queries.
+---
 
-The Phase 2 crawler excludes the Phase 1 `metadata/` prefix so only clean CSV
-objects are cataloged.
+## Further reading
 
-## Deployment (AWS Phase 3)
-
-Phase 3 turns the clean CSV layer into a curated analytics layer. It reads clean
-CSV files plus Phase 1 manifests, applies business transformations, writes
-Parquet to a curated bucket, and quarantines malformed transformed rows without
-failing the whole job unless a configured threshold is exceeded.
-
-The repository includes a PowerShell helper:
-
-```powershell
-.\scripts\deploy_phase3.ps1
-```
-
-By default it assumes:
-
-- Region: `us-east-1`
-- KMS key: `alias/streamforge-phase1`
-- Clean bucket: `streamforge-clean-<account-id>-<region>`
-- Metadata bucket: `streamforge-metadata-<account-id>-<region>`
-- Curated bucket: `streamforge-curated-<account-id>-<region>`
-- Quarantine bucket: `streamforge-quarantine-<account-id>-<region>`
-- Glue database: `streamforge_clean_db`
-- Glue job: `streamforge-transform-customers`
-- Curated table: `customers_curated`
-- Athena workgroup: `streamforge-phase3`
-
-### What the script does
-
-1. Creates and hardens the curated and quarantine buckets with `SSE-KMS`.
-2. Creates the Phase 3 Glue transform role.
-3. Uploads the Glue script and helper package to S3.
-4. Creates or updates the Phase 3 Glue job.
-5. Runs the job against the current clean data and manifests.
-6. Creates the curated Athena table.
-7. Repairs partitions and verifies the curated output with Athena.
-
-### Phase 3 outputs
-
-Curated output:
-
-```text
-s3://streamforge-curated-<account-id>-<region>/customers/year=YYYY/month=MM/day=DD/
-```
-
-Quarantine output:
-
-```text
-s3://streamforge-quarantine-<account-id>-<region>/reason=<reason>/year=YYYY/month=MM/day=DD/
-```
-
-### Business transformations
-
-Phase 3 currently implements:
-
-- whitespace trimming for string values
-- customer-name normalization
-- email lowercasing
-- sales parsing and categorical bucketing
-- lineage enrichment from the Phase 1 manifest
-- partition derivation from the manifest event timestamp
-
-If you later add a business date field to the clean schema, the Glue job can
-also standardize it by passing `-DateColumn <column-name>`.
-
-### Phase 3 sample Athena queries
-
-See [scripts/phase3_queries.sql](scripts/phase3_queries.sql) for example queries
-over `streamforge_clean_db.customers_curated`.
-
-### Phase 2 sample Athena queries
-
-See [scripts/phase2_queries.sql](scripts/phase2_queries.sql) for the DDL and
-query examples used for verification.
-
-Expected ordered query result:
-
-```text
-customer_id,name,email,sales
-101,John,john@gmail.com,500
-104,Raj,raj@gmail.com,1000
-```
-
-Expected aggregate query result:
-
-```text
-total_customers,total_sales,average_sales
-2,1500,750.0
-```
-
-## Remaining work
-
-- Create a separate production AWS account, Terraform state, OIDC role, and
-  GitHub `prod` environment.
-- Consider a custom domain/ACM certificate, cross-region recovery, Lambda code
-  signing, and immutable GitHub Action pins for additional production maturity.
-
-For the detailed collaborator context and operational status, see
-[docs/agent-handoff.md](docs/agent-handoff.md) and the
-[definition of done](docs/definition-of-done.md).
+- [Architecture](docs/architecture.md) · [Database architecture](docs/database-architecture.md)
+- [Cost estimate](docs/cost-estimate.md) · [Disaster recovery](docs/disaster-recovery.md)
+- [ADRs](docs/adr/) · [Runbooks](docs/runbooks/) · [Diagrams](docs/diagrams/)
+- [Terraform import guide](docs/terraform-import-guide.md)
+- [Legacy manual deployment](docs/legacy-manual-deployment.md) — superseded, kept for reference

@@ -22,3 +22,7 @@ override.tf.json
 backend.hcl
 terraform.tfvars
 .claude
+
+# Terraform plan artifacts. *.tfplan missed the bare "tfplan" name.
+tfplan
+*.tfplan.*

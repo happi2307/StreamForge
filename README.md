@@ -361,33 +361,6 @@ the quarantine zone, so that path is exercised on every run.
 
 ---
 
-## Design decisions worth knowing
-
-**The portal has no build step.** The CloudFront response headers policy sets
-`default-src 'self'` with no `unsafe-inline`, which rules out CDN scripts,
-Google Fonts, inline `<script>`/`<style>`, and `style` attributes in markup.
-Charts are therefore hand-built SVG and diagrams are DOM, all constructed with
-`createElement`. There is no bundler and no `node_modules`.
-
-**Chart colours were validated, not chosen.** Green and red for valid versus
-rejected scores ΔE 2.5 under deuteranopia — indistinguishable. The shipped pair
-scores 17.3. Palettes and the command to re-check them are documented at the top
-of `web/charts.js`.
-
-**Pages report honestly when a dependency is missing.** The Warehouse page says
-Phase 5 is not deployed rather than showing an invented schema, and the lineage
-graph labels object counts as objects rather than records.
-
-**EventBridge cannot start a Glue job directly.** The transform hangs off a Glue
-workflow with an EVENT trigger, which EventBridge *can* start, rather than
-introducing a Lambda whose only purpose is to call `start_job_run`. Event
-batching coalesces bursts, so a group of uploads becomes a single run rather
-than several racing the job's concurrency limit.
-
-**Terraform never sees the database password.** `manage_master_user_password`
-means RDS generates it straight into Secrets Manager; state holds only the ARN.
-
----
 
 ## Further reading
 
